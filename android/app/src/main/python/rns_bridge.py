@@ -246,6 +246,13 @@ def inject_rnode(freq, bw, tx, sf, cr):
 
                 try:
                     active_ifac = RNodeInterface(RNS.Transport, ictx)
+                    # Force interface to be active and ready for transmission
+                    active_ifac.IN = True
+                    active_ifac.OUT = True
+                    active_ifac.mode = Interface.MODE_FULL
+                    
+                    if active_ifac not in RNS.Transport.interfaces:
+                        RNS.Transport.interfaces.append(active_ifac)
                 finally:
                     serial.Serial = _orig_serial
                     if _has_android_arg:
@@ -254,6 +261,19 @@ def inject_rnode(freq, bw, tx, sf, cr):
                         os.environ["ANDROID_ROOT"] = _old_android_root
                 
                 log(f"Interface Injection Done. Status: {active_ifac}")
+                
+                # Allow some time for KISS initialization over the bridge
+                time.sleep(2.0)
+                
+                # Start periodic announce loop in a separate thread
+                def _announce_loop():
+                    while is_rns_running:
+                        try:
+                            time.sleep(900) # Every 15 minutes
+                            announce_now()
+                        except:
+                            pass
+                threading.Thread(target=_announce_loop, daemon=True).start()
                 break
             except Exception as e:
                 retries -= 1
@@ -280,14 +300,29 @@ def send_text(dest_hex, text):
         log(f"LXMF SENDING to {dest_hex}...")
         dest_hash = bytes.fromhex(dest_hex)
         dest_id = RNS.Identity.recall(dest_hash)
-        dest = RNS.Destination(dest_id, RNS.Destination.OUT, RNS.Destination.SINGLE, "lxmf", "delivery")
-        if dest_id is None: dest.hash = dest_hash
+        
+        if dest_id:
+            dest = RNS.Destination(dest_id, RNS.Destination.OUT, RNS.Destination.SINGLE, "lxmf", "delivery")
+        else:
+            # Create destination with hash if identity is unknown
+            dest = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.SINGLE, "lxmf", "delivery")
+            dest.hash = dest_hash
+            log(f"Identity for {dest_hex} unknown, sending as hash-only destination")
         
         lxm = LXMessage(dest, local_destination, text)
         router.handle_outbound(lxm)
+        
+        # Force transport to process
+        try:
+            RNS.Transport.process_outbound_queue()
+        except:
+            pass
+            
         return RNS.hexrep(lxm.hash, False)
     except Exception as e:
         log(f"Send Error: {e}")
+        import traceback
+        log(traceback.format_exc())
         return ""
 
 def send_report(target_hex, harvester_nick, block_id, ripe, empty, lat, lon, ts_str, photo_b64):
@@ -310,3 +345,8 @@ def announce_now():
     if local_destination:
         log("SENDING ANNOUNCE...")
         local_destination.announce(app_data=local_destination.display_name.encode("utf-8"))
+        # Force transport to process outbound queue
+        try:
+            RNS.Transport.process_outbound_queue()
+        except:
+            pass

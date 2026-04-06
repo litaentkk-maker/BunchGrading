@@ -18,7 +18,8 @@ import {
   ArrowLeft,
   Activity,
   Bluetooth,
-  BluetoothOff
+  BluetoothOff,
+  MessageSquare
 } from 'lucide-react';
 import { HarvestRecord, RNSConfig, RNSStatus } from '@/src/types';
 import { rnsService } from '@/src/services/rnsService';
@@ -48,18 +49,11 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
+  const [messages, setMessages] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchDevices = async () => {
       try {
-        // Request permissions first on Android 12+
-        if (Capacitor.getPlatform() === 'android') {
-          // We use a simple check for now, but in a real app we'd use a permission plugin
-          // For this environment, we'll assume the user can grant them if prompted
-          // or we can try to trigger a scan which usually prompts for permissions.
-          console.log('Checking permissions...');
-        }
-        
         const pairedDevices = await rnsService.getDevices();
         setDevices(pairedDevices);
         if (pairedDevices.length > 0) {
@@ -71,12 +65,23 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
     };
     fetchDevices();
 
+    // Initial messages
+    setMessages(rnsService.getMessages());
+    
+    // Listen for new messages
+    const unsubscribe = rnsService.onMessage((msg) => {
+      setMessages(prev => [msg, ...prev].slice(0, 50));
+    });
+    
     // Listen for status updates from the service
     const interval = setInterval(() => {
       setStatus({ ...rnsService.getStatus() });
     }, 500);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   const handleConnect = async () => {
@@ -124,8 +129,15 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
     
     try {
       for (let i = 0; i < records.length; i++) {
-        await rnsService.syncRecord(records[i], config.destinationHex);
+        const msgHash = await rnsService.syncRecord(records[i], config.destinationHex);
         setSyncProgress(Math.round(((i + 1) / records.length) * 100));
+        setMessages(prev => [{
+          id: Date.now() + i,
+          type: 'out',
+          text: `Synced record ${records[i].id} to ${config.destinationHex.substring(0, 8)}...`,
+          hash: msgHash,
+          time: new Date().toLocaleTimeString()
+        }, ...prev]);
       }
       toast.success('All records synced via RNS/LXMF');
     } catch (error: any) {
@@ -140,6 +152,12 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       await rnsService.announce(config.nickname);
       setStatus(rnsService.getStatus());
       toast.success('Announce sent to Reticulum network');
+      setMessages(prev => [{
+        id: Date.now(),
+        type: 'info',
+        text: `Sent announcement as "${config.nickname}"`,
+        time: new Date().toLocaleTimeString()
+      }, ...prev]);
     } catch (error: any) {
       toast.error('Announce failed', { description: error.message });
     }
@@ -363,10 +381,10 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wider text-gray-500">Destination Hash (Hex)</Label>
               <div className="relative">
-                <Send className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <Send className="absolute left-3 top-3 w-5 h-5 text-gray-400 pointer-events-none" />
                 <Input 
                   placeholder="e.g. 8b4f2c..." 
-                  className="pl-10 h-12 rounded-xl border-gray-200 font-mono text-sm text-gray-900 bg-white"
+                  className="pl-10 h-12 rounded-xl border-gray-200 font-mono text-sm text-gray-900 bg-white focus:ring-2 focus:ring-primary-500 transition-all"
                   value={config.destinationHex}
                   onChange={(e) => setConfig({ ...config, destinationHex: e.target.value })}
                 />
@@ -415,6 +433,53 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
             <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
               LXMF (Lightweight eXchange Message Format) allows sending harvest data over LoRa without cellular coverage. Photos will be compressed for transmission.
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Message Log */}
+      <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white mb-8">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary-600" />
+              <h3 className="font-black text-gray-900">LXMF Message Log</h3>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setMessages([])}
+              className="text-xs font-bold text-gray-400 hover:text-gray-600"
+            >
+              Clear
+            </Button>
+          </div>
+          
+          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            {messages.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-400 text-sm font-medium italic">No messages yet...</p>
+              </div>
+            ) : (
+              messages.map(msg => (
+                <div key={msg.id} className={`p-3 rounded-2xl text-sm ${
+                  msg.type === 'info' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                  msg.type === 'out' ? 'bg-green-50 text-green-700 border border-green-100' :
+                  'bg-gray-50 text-gray-700 border border-gray-100'
+                }`}>
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-black uppercase text-[10px] tracking-widest opacity-60">
+                      {msg.type === 'info' ? 'System' : msg.type === 'out' ? 'Outgoing' : 'Incoming'}
+                    </span>
+                    <span className="text-[10px] font-bold opacity-50">{msg.time}</span>
+                  </div>
+                  <p className="font-medium leading-relaxed">{msg.text}</p>
+                  {msg.hash && (
+                    <p className="text-[10px] font-mono mt-1 opacity-50 truncate">Hash: {msg.hash}</p>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

@@ -22,13 +22,32 @@ class RNSService {
     isRnsRunning: false,
   };
 
+  private messages: any[] = [];
+  private messageListeners: ((msg: any) => void)[] = [];
+
   constructor() {
     if (this.isCapacitor) {
       RNSPlugin.addListener('onAnnounceReceived', (data) => {
         console.log('Announce received:', data);
+        const msg = {
+          id: Date.now(),
+          type: 'info',
+          text: `Discovered node: ${data.name || 'Unknown'} (${data.hash.substring(0, 8)}...)`,
+          time: new Date().toLocaleTimeString()
+        };
+        this.addMessage(msg);
       });
       RNSPlugin.addListener('onNewMessage', (data) => {
         console.log('New message:', data);
+        const msg = {
+          id: Date.now(),
+          type: 'in',
+          text: data.content,
+          sender: data.sender,
+          time: new Date(data.time).toLocaleTimeString(),
+          hash: data.hash
+        };
+        this.addMessage(msg);
       });
       RNSPlugin.addListener('onStatusUpdate', (data: { message: string }) => {
         console.log('Status update:', data.message);
@@ -38,6 +57,22 @@ class RNSService {
         };
       });
     }
+  }
+
+  private addMessage(msg: any) {
+    this.messages = [msg, ...this.messages].slice(0, 50);
+    this.messageListeners.forEach(l => l(msg));
+  }
+
+  onMessage(callback: (msg: any) => void) {
+    this.messageListeners.push(callback);
+    return () => {
+      this.messageListeners = this.messageListeners.filter(l => l !== callback);
+    };
+  }
+
+  getMessages() {
+    return this.messages;
   }
 
   async getDevices(): Promise<{ name: string, address: string }[]> {
