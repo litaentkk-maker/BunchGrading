@@ -158,14 +158,26 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       </div>
 
       {/* GLOBAL DIAGNOSTICS - MOVED TO TOP FOR ABSOLUTE VISIBILITY */}
-      <div className="bg-black p-4 rounded-3xl border-4 border-green-500 shadow-2xl ring-4 ring-black/20">
-        <div className="flex items-center gap-2 mb-2">
-          <Activity className="w-5 h-5 text-green-400" />
-          <span className="text-[11px] font-black text-white uppercase tracking-widest">System Live Diagnostics</span>
+      <div className={`bg-black p-4 rounded-3xl border-4 shadow-2xl ring-4 ring-black/20 min-h-[120px] flex flex-col transition-colors duration-500 ${
+        status?.isConnected ? 'border-green-500' : 'border-red-500'
+      }`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Activity className={`w-5 h-5 ${status?.isConnected ? 'text-green-400' : 'text-red-400'}`} />
+            <span className="text-[11px] font-black text-white uppercase tracking-widest">System Live Diagnostics</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full animate-ping ${status?.isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-[10px] font-bold text-gray-400 uppercase">
+              {status?.isConnected ? 'Link Active' : 'Link Offline'}
+            </span>
+          </div>
         </div>
-        <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800">
-          <p className="text-sm font-mono font-bold text-green-400 animate-pulse break-all leading-relaxed">
-            {status.statusMessage || "SYSTEM READY - WAITING FOR ACTION..."}
+        <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800 flex-1 overflow-y-auto">
+          <p className={`text-sm font-mono font-bold animate-pulse break-all leading-relaxed ${
+            status?.isConnected ? 'text-green-400' : 'text-red-400'
+          }`}>
+            {status?.statusMessage || (status?.isConnected ? "SYSTEM READY - WAITING FOR ACTION..." : "PLEASE CONNECT TO RNODE VIA BLUETOOTH")}
           </p>
         </div>
       </div>

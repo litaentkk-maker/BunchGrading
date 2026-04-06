@@ -173,9 +173,11 @@ class RNodeService : Service() {
         withContext(Dispatchers.IO) {
             while (isBridging && isActive) {
                 try {
+                    Log.i("RNS_SERVICE", "TCP Server: Waiting for Python client on port 7633...")
                     val client = tcpServer?.accept() ?: break
                     client.tcpNoDelay = true
-                    Log.i("RNS_SERVICE", "LoRa Link Active (TCP Client connected)")
+                    Log.i("RNS_SERVICE", "TCP Server: Python client connected from ${client.inetAddress}")
+                    onStatusUpdate("RNode Bridge Connected")
 
                     val btIn = btSocket!!.inputStream
                     val btOut = btSocket!!.outputStream

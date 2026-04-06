@@ -185,6 +185,18 @@ class RNSPlugin : Plugin() {
         val cr = call.getInt("codingrate") ?: 6
 
         try {
+            // Save to SharedPreferences for the background service
+            val prefs = context.getSharedPreferences("rns_database", Context.MODE_PRIVATE)
+            prefs.edit().apply {
+                putInt("freq", freq)
+                putInt("bw", bw)
+                putInt("tx", tx)
+                putInt("sf", sf)
+                putInt("cr", cr)
+                apply()
+            }
+            android.util.Log.i("RNS_PLUGIN", "Saved RNode config to SharedPreferences")
+
             val bridge = python?.getModule("rns_bridge")
             val status = bridge?.callAttr("inject_rnode", freq, bw, tx, sf, cr)?.toString()
             

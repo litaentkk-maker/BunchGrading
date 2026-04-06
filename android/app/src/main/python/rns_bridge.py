@@ -170,12 +170,25 @@ def inject_rnode(freq, bw, tx, sf, cr):
             "codingrate": int(cr), 
             "flow_control": False
         }
-        log(f"Injecting interface with config: {ictx}")
+        log(f"Injecting RNode interface via TCP:127.0.0.1:7633")
+        
+        # We use a small delay to ensure the Kotlin TCP server is ready
+        time.sleep(0.5)
+        
         active_ifac = RNodeInterface(RNS.Transport, ictx)
         active_ifac.mode = Interface.MODE_FULL
         active_ifac.IN = True; active_ifac.OUT = True
-        RNS.Transport.interfaces.append(active_ifac)
-        log(f"Interface Injection Done. Interface status: {active_ifac}")
+        
+        # Manually add to transport if not already there
+        if active_ifac not in RNS.Transport.interfaces:
+            RNS.Transport.interfaces.append(active_ifac)
+            
+        log(f"Interface Injection Done. Status: {active_ifac}")
+        
+        # Check if it's actually connected
+        if hasattr(active_ifac, "online") and not active_ifac.online:
+            log("Warning: Interface is offline. Checking bridge...")
+            
         return "ONLINE"
     except Exception as e: 
         log(f"Injection Error: {str(e)}")
