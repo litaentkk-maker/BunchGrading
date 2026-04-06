@@ -177,8 +177,8 @@ class RNodeService : Service() {
                 tcpServer = ServerSocket()
                 tcpServer?.reuseAddress = true
                 tcpServer?.soTimeout = 60000 // 60 second timeout for accept
-                tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
-                Log.i("RNS_BRIDGE", "TCP Bridge Server listening on 127.0.0.1:7633")
+                tcpServer?.bind(InetSocketAddress("0.0.0.0", 7633))
+                Log.i("RNS_BRIDGE", "TCP server bound, inetAddress=${tcpServer?.inetAddress}, localPort=${tcpServer?.localPort}")
 
                 // Wait for RNS to be ready, then inject
                 serviceScope.launch {

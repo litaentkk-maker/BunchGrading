@@ -45,7 +45,6 @@ importlib.util.find_spec = _mock_find_spec
 
 import RNS, LXMF
 from LXMF import LXMRouter, LXMessage
-from RNS.Interfaces.RNodeInterface import RNodeInterface
 from RNS.Interfaces.TCPInterface import TCPClientInterface
 from RNS.Interfaces.Interface import Interface
 
@@ -77,14 +76,6 @@ def start_rns(storage_path, callback_obj, nickname):
     log(f"start_rns() called with storage_path: {storage_path}")
     log(f"DIAGNOSTIC: platform.system()={platform.system()}, sys.platform={sys.platform}")
     
-    try:
-        import inspect
-        from RNS.Interfaces.RNodeInterface import RNodeInterface
-        source = inspect.getsource(RNodeInterface.__init__)
-        log(f"RNodeInterface.__init__ source:\n{source}")
-    except Exception as e:
-        log(f"Failed to get RNodeInterface source: {e}")
-        
     if is_rns_running and local_destination is not None: 
         log("RNS already running, returning existing hash")
         return RNS.hexrep(local_destination.hash, False)
@@ -212,78 +203,38 @@ def inject_rnode(freq, bw, tx, sf, cr):
             except Exception as e:
                 log(f"Error removing old interface: {e}")
 
-        # Use RNodeInterface with a socket:// URL to talk to our local bridge
-        # This allows RNS to handle KISS framing and RNode configuration
-        ictx = {
-            "name": "RNodeBridge", 
-            "type": "RNodeInterface", 
-            "interface_enabled": True, 
-            "port": "socket://127.0.0.1:7633",
-            "frequency": freq,
-            "bandwidth": bw,
-            "txpower": tx,
-            "spreadingfactor": sf,
-            "codingrate": cr,
-            "flow_control": False
-        }
-        log(f"Injecting RNode interface via socket://127.0.0.1:7633")
-        
-        # We use a retry loop to ensure the Kotlin TCP server is ready
         retries = 5
         while retries > 0:
             try:
-                # --- PLATFORM MONKEYPATCH ---
-                # Reticulum's RNodeInterface checks os.environ for ANDROID_ARGUMENT or ANDROID_ROOT
-                # to determine if it's running on Android. We temporarily hide these to bypass the check.
-                _has_android_arg = "ANDROID_ARGUMENT" in os.environ
-                _old_android_arg = os.environ.get("ANDROID_ARGUMENT")
-                if _has_android_arg:
-                    del os.environ["ANDROID_ARGUMENT"]
-                    
-                _has_android_root = "ANDROID_ROOT" in os.environ
-                _old_android_root = os.environ.get("ANDROID_ROOT")
-                if _has_android_root:
-                    del os.environ["ANDROID_ROOT"]
+                log(f"Connecting TCPClientInterface to 127.0.0.1:7633 (attempt {6-retries})...")
+                ictx = {
+                    "name": "RNodeBridge",
+                    "type": "TCPClientInterface",
+                    "interface_enabled": True,
+                    "outgoing": True,
+                    "target_host": "127.0.0.1",
+                    "target_port": 7633,
+                }
+                active_ifac = TCPClientInterface(RNS.Transport, ictx)
+                active_ifac.IN = True
+                active_ifac.OUT = True
+                active_ifac.mode = Interface.MODE_FULL
 
-                # --- SERIAL MONKEYPATCH ---
-                # Reticulum 0.9.1 doesn't support tcp:// or socket:// natively in RNodeInterface.
-                # It passes the port string directly to serial.Serial().
-                # We monkeypatch serial.Serial to intercept socket:// and use serial_for_url instead.
-                import serial
-                _orig_serial = serial.Serial
-                def _patched_serial(*args, **kwargs):
-                    port = kwargs.get('port') or (args[0] if args else None)
-                    if port and str(port).startswith("socket://"):
-                        return serial.serial_for_url(*args, **kwargs)
-                    return _orig_serial(*args, **kwargs)
-                serial.Serial = _patched_serial
+                if active_ifac not in RNS.Transport.interfaces:
+                    RNS.Transport.interfaces.append(active_ifac)
 
-                try:
-                    active_ifac = RNodeInterface(RNS.Transport, ictx)
-                finally:
-                    # Restore serial
-                    serial.Serial = _orig_serial
-                    # Restore environment variables
-                    if _has_android_arg:
-                        os.environ["ANDROID_ARGUMENT"] = _old_android_arg
-                    if _has_android_root:
-                        os.environ["ANDROID_ROOT"] = _old_android_root
-                
-                # RNodeInterface handles its own registration and mode
-                log(f"Interface Injection Done. Status: {active_ifac}")
-                break
+                log(f"TCPClientInterface connected. Online: {getattr(active_ifac, 'online', '?')}")
+                return "ONLINE"
             except Exception as e:
                 retries -= 1
-                log(f"Interface connection failed, retrying... ({retries} left): {e}")
+                log(f"TCPClientInterface failed ({retries} left): {e}")
                 time.sleep(1.0)
-        
-        if retries == 0:
-            log("FATAL: Failed to connect to local TCP bridge after 5 attempts")
-            return "OFFLINE"
-            
-        return "ONLINE"
-    except Exception as e: 
-        log(f"Injection Error: {str(e)}")
+
+        log("FATAL: Could not connect TCPClientInterface after 5 attempts")
+        return "OFFLINE"
+
+    except Exception as e:
+        log(f"Injection Error: {e}")
         import traceback
         log(traceback.format_exc())
         return str(e)
