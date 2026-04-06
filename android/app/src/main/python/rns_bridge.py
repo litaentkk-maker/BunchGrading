@@ -1,4 +1,4 @@
-import os, sys, time, base64, signal, warnings
+import os, sys, time, base64, signal, warnings, json
 from types import ModuleType
 import importlib.util, importlib.machinery
 
@@ -18,15 +18,27 @@ def _mock_signal(sig, handler):
 signal.signal = _mock_signal
 
 class Dummy:
-    def __getattr__(self, name): return Dummy()
-    def __call__(self, *args, **kwargs): return Dummy()
-mock_usb = ModuleType("usbserial4a"); mock_usb.__spec__ = importlib.machinery.ModuleSpec("usbserial4a", None)
-mock_usb.serial4a = Dummy(); mock_usb.get_ports_list = lambda: []; sys.modules["usbserial4a"] = mock_usb
-mock_jnius = ModuleType("jnius"); mock_jnius.__spec__ = importlib.machinery.ModuleSpec("jnius", None)
-mock_jnius.autoclass = lambda x: Dummy(); mock_jnius.cast = lambda x, y: Dummy(); sys.modules["jnius"] = mock_jnius
+    def __init__(self, name="Dummy"):
+        self.__name__ = name
+        self.__spec__ = importlib.machinery.ModuleSpec(name, None)
+    def __getattr__(self, name): return self
+    def __call__(self, *args, **kwargs): return self
+    def __len__(self): return 0
+    def __getitem__(self, index): return self
+
+def mock_module(name):
+    mock = Dummy(name)
+    sys.modules[name] = mock
+    return mock
+
+mock_module("usbserial4a").serial4a = Dummy("serial4a")
+mock_module("jnius").autoclass = lambda x: Dummy("DummyClass")
+mock_module("usb4a").usb = Dummy("usb4a.usb")
+sys.modules["usb4a.usb"] = sys.modules["usb4a"].usb
+
 _orig_find_spec = importlib.util.find_spec
 def _mock_find_spec(name, package=None):
-    if name in ["usbserial4a", "jnius"]: return sys.modules[name].__spec__
+    if name in ["usbserial4a", "jnius", "usb4a", "usb4a.usb"]: return sys.modules[name].__spec__
     return _orig_find_spec(name, package)
 importlib.util.find_spec = _mock_find_spec
 
@@ -45,9 +57,11 @@ def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
     kotlin_callback = callback_obj
     if is_rns_running and local_destination is not None: return RNS.hexrep(local_destination.hash, False)
-    os.environ["TMPDIR"] = os.path.join(str(storage_path), "cache")
-    rns_dir = os.path.join(str(storage_path), ".reticulum")
-    lxmf_dir = os.path.join(str(storage_path), ".lxmf")
+    
+    storage_path = str(storage_path)
+    os.environ["TMPDIR"] = os.path.join(storage_path, "cache")
+    rns_dir = os.path.join(storage_path, ".reticulum")
+    lxmf_dir = os.path.join(storage_path, ".lxmf")
     for d in [os.environ["TMPDIR"], rns_dir, lxmf_dir]:
         if not os.path.exists(d): os.makedirs(d)
     
@@ -59,9 +73,12 @@ def start_rns(storage_path, callback_obj, nickname):
     
     try: RNS.Reticulum(configdir=rns_dir)
     except OSError: pass
-    id_path = os.path.join(rns_dir, "storage_identity")
+    
+    # Identity is stored in the root storage_path to keep it safe from config wipes
+    id_path = os.path.join(storage_path, "storage_identity")
     local_id = RNS.Identity.from_file(id_path) if os.path.exists(id_path) else RNS.Identity()
     if not os.path.exists(id_path): local_id.to_file(id_path)
+    
     router = LXMRouter(identity=local_id, storagepath=lxmf_dir)
     local_destination = router.register_delivery_identity(local_id, display_name=nickname)
     router.register_delivery_callback(on_lxmf)
@@ -90,16 +107,32 @@ def on_lxmf(lxm):
         content = path
     if kotlin_callback: kotlin_callback.onNewMessage(sender, content, int(time.time()*1000), is_img, False, RNS.hexrep(lxm.hash, False))
 
+def inject_rnode_json(params_json):
+    try:
+        params = json.loads(params_json)
+        freq = params.get("freq", 433000000)
+        bw = params.get("bw", 125000)
+        tx = params.get("tx", 17)
+        sf = params.get("sf", 8)
+        cr = params.get("cr", 6)
+        return inject_rnode(freq, bw, tx, sf, cr)
+    except Exception as e:
+        log(f"JSON Injection Error: {e}")
+        return str(e)
+
 def inject_rnode(freq, bw, tx, sf, cr):
     log(f"TUNING: F:{freq} BW:{bw} SF:{sf} CR:{cr}")
     try:
         # Use the standard RNodeInterface and point it to our local TCP bridge
+        # We provide both 'port' and 'tcp_host/port' for maximum compatibility across RNS versions
         ictx = {
             "name": "Bridge", 
             "type": "RNodeInterface", 
             "interface_enabled": True, 
             "outgoing": True,
             "port": "tcp://127.0.0.1:7633",
+            "tcp_host": "127.0.0.1",
+            "tcp_port": 7633,
             "frequency": int(freq), 
             "bandwidth": int(bw),
             "txpower": int(tx), 
@@ -120,12 +153,29 @@ def inject_rnode(freq, bw, tx, sf, cr):
 def send_text(dest_hex, text):
     try:
         log(f"LXMF SENDING to {dest_hex}...")
-        dest_id = RNS.Identity.recall(bytes.fromhex(dest_hex))
+        dest_hash = bytes.fromhex(dest_hex)
+        dest_id = RNS.Identity.recall(dest_hash)
         dest = RNS.Destination(dest_id, RNS.Destination.OUT, RNS.Destination.SINGLE, "lxmf", "delivery")
+        if dest_id is None: dest.hash = dest_hash
+        
         lxm = LXMessage(dest, local_destination, text)
         router.handle_outbound(lxm)
         return RNS.hexrep(lxm.hash, False)
-    except: return ""
+    except Exception as e:
+        log(f"Send Error: {e}")
+        return ""
+
+def send_report(target_hex, harvester_nick, block_id, ripe, empty, lat, lon, ts_str, photo_b64):
+    try:
+        # ALIGNED CSV SCHEMA: id, harvester_id, block_id, ripe_bunches, empty_bunches, latitude, longitude, timestamp, photo_file
+        report_id = f"R{int(time.time())}"
+        csv_payload = f"id,harvester_id,block_id,ripe_bunches,empty_bunches,latitude,longitude,timestamp,photo_file\n"
+        csv_payload += f"{report_id},{harvester_nick},{block_id},{ripe},{empty},{lat},{lon},{ts_str},{photo_b64}"
+        
+        return send_text(target_hex, csv_payload)
+    except Exception as e:
+        log(f"Report Error: {e}")
+        return ""
 
 def send_image(dest_hex, path):
     with open(path, "rb") as f: data = base64.b64encode(f.read()).decode("utf-8")
