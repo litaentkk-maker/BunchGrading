@@ -1,8 +1,18 @@
-import os, sys, time, base64
+import os, sys, time, base64, signal
 from types import ModuleType
 import importlib.util, importlib.machinery
 
 # --- SIDEBAND/COLUMBA COMPATIBILITY MOCKS ---
+# Mock signal.signal because Reticulum tries to register handlers on a background thread
+_orig_signal = signal.signal
+def _mock_signal(sig, handler):
+    try:
+        return _orig_signal(sig, handler)
+    except ValueError:
+        # Ignore "signal only works in main thread" error
+        return None
+signal.signal = _mock_signal
+
 class Dummy:
     def __getattr__(self, name): return Dummy()
     def __call__(self, *args, **kwargs): return Dummy()
@@ -18,7 +28,7 @@ importlib.util.find_spec = _mock_find_spec
 
 import RNS, LXMF
 from LXMF import LXMRouter, LXMessage
-from RNS.Interfaces.Android.RNodeInterface import RNodeInterface
+from RNS.Interfaces.RNodeInterface import RNodeInterface
 from RNS.Interfaces.Interface import Interface
 
 router = None; local_destination = None; kotlin_callback = None; is_rns_running = False
@@ -36,8 +46,13 @@ def start_rns(storage_path, callback_obj, nickname):
     lxmf_dir = os.path.join(str(storage_path), ".lxmf")
     for d in [os.environ["TMPDIR"], rns_dir, lxmf_dir]:
         if not os.path.exists(d): os.makedirs(d)
-    with open(os.path.join(rns_dir, "config"), "w") as f:
-        f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]")
+    
+    # Create a basic config if it doesn't exist
+    config_path = os.path.join(rns_dir, "config")
+    if not os.path.exists(config_path):
+        with open(config_path, "w") as f:
+            f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]\n")
+    
     try: RNS.Reticulum(configdir=rns_dir)
     except OSError: pass
     id_path = os.path.join(rns_dir, "storage_identity")
@@ -74,16 +89,29 @@ def on_lxmf(lxm):
 def inject_rnode(freq, bw, tx, sf, cr):
     log(f"TUNING: F:{freq} BW:{bw} SF:{sf} CR:{cr}")
     try:
-        ictx = {"name": "Bridge", "type": "RNodeInterface", "interface_enabled": True, "outgoing": True,
-                "tcp_host": "127.0.0.1", "tcp_port": 7633, "frequency": int(freq), "bandwidth": int(bw),
-                "txpower": int(tx), "spreadingfactor": int(sf), "codingrate": int(cr), "flow_control": False}
+        # Use the standard RNodeInterface and point it to our local TCP bridge
+        ictx = {
+            "name": "Bridge", 
+            "type": "RNodeInterface", 
+            "interface_enabled": True, 
+            "outgoing": True,
+            "port": "tcp://127.0.0.1:7633",
+            "frequency": int(freq), 
+            "bandwidth": int(bw),
+            "txpower": int(tx), 
+            "spreadingfactor": int(sf), 
+            "codingrate": int(cr), 
+            "flow_control": False
+        }
         ifac = RNodeInterface(RNS.Transport, ictx)
         ifac.mode = Interface.MODE_FULL
         ifac.IN = True; ifac.OUT = True
         RNS.Transport.interfaces.append(ifac)
         log("Interface Injection Done.")
         return "ONLINE"
-    except Exception as e: return str(e)
+    except Exception as e: 
+        log(f"Injection Error: {str(e)}")
+        return str(e)
 
 def send_text(dest_hex, text):
     try:
