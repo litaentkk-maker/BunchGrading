@@ -1,4 +1,13 @@
-import os, sys, time, base64, signal, warnings, json
+import os, sys, time, base64, signal, warnings, json, platform
+
+# --- PLATFORM MONKEYPATCH ---
+# Reticulum's RNodeInterface has a hardcoded check that prevents it from
+# being used on Android, forcing the use of Android-specific USB/BT interfaces.
+# However, we are using a TCP-to-Bluetooth bridge via socket://, which 
+# works perfectly with the standard RNodeInterface. We bypass this check
+# by making Reticulum think it's running on Linux.
+platform.system = lambda: "Linux"
+
 from types import ModuleType
 import importlib.util, importlib.machinery
 
