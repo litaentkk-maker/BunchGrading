@@ -172,31 +172,31 @@ class RNodeService : Service() {
             try {
                 tcpServer = ServerSocket()
                 tcpServer?.reuseAddress = true
-                tcpServer?.soTimeout = 30000 // 30 second timeout for accept
+                tcpServer?.soTimeout = 60000 // 60 second timeout for accept
                 tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
                 Log.i("RNS_BRIDGE", "TCP Bridge Server listening on 127.0.0.1:7633")
+
+                // Wait for RNS to be ready, then inject
+                serviceScope.launch {
+                    var waited = 0
+                    while (!rnsReady && waited < 45) {
+                        delay(1000)
+                        waited++
+                        Log.i("RNS_SERVICE", "Waiting for RNS ready... ($waited)")
+                    }
+                    if (rnsReady) {
+                        Log.i("RNS_SERVICE", "RNS ready, injecting Python interface")
+                        injectPython()
+                    } else {
+                        Log.e("RNS_SERVICE", "Timed out waiting for RNS")
+                        onStatusUpdate("RNS Init Timeout")
+                    }
+                }
                 
                 while (isBridging && isActive) {
                     try {
                         Log.i("RNS_SERVICE", "TCP Server: Calling accept() - waiting for Python...")
                         onStatusUpdate("Waiting for Python Bridge...")
-                        
-                        // Wait for RNS to be ready, then inject
-                        serviceScope.launch {
-                            var waited = 0
-                            while (!rnsReady && waited < 30) {
-                                delay(1000)
-                                waited++
-                                Log.i("RNS_SERVICE", "Waiting for RNS ready... ($waited)")
-                            }
-                            if (rnsReady) {
-                                Log.i("RNS_SERVICE", "RNS ready, injecting Python interface")
-                                injectPython()
-                            } else {
-                                Log.e("RNS_SERVICE", "Timed out waiting for RNS")
-                                onStatusUpdate("RNS Init Timeout")
-                            }
-                        }
 
                         val client = tcpServer?.accept() ?: break
                         client.tcpNoDelay = true
@@ -255,6 +255,9 @@ class RNodeService : Service() {
                                 }
                             }
                         }
+                    } catch (e: java.net.SocketTimeoutException) {
+                        Log.w("RNS_SERVICE", "TCP Accept Timeout - Still waiting for Python...")
+                        continue
                     } catch (e: Exception) { 
                         Log.e("RNS_SERVICE", "TCP Accept Error", e)
                         break 

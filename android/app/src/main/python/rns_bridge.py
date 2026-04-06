@@ -146,7 +146,7 @@ def inject_rnode(freq, bw, tx, sf, cr):
     
     # Wait for RNS to be fully started
     waited = 0
-    while not is_rns_running and waited < 30:
+    while not is_rns_running and waited < 45:
         log(f"Waiting for RNS to start... ({waited}s)")
         time.sleep(1)
         waited += 1
