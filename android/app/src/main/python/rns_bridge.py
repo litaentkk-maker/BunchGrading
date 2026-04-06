@@ -220,45 +220,26 @@ def inject_rnode(freq, bw, tx, sf, cr):
         while retries > 0:
             try:
                 # --- PLATFORM MONKEYPATCH ---
-                # Temporarily force platform to Linux during init to bypass the Android check
-                import platform as p
-                import sys
-                _old_sys = p.system
-                _old_rel = p.release
-                p.system = lambda: "Linux"
-                p.release = lambda: "generic"
-                
-                _has_android_api = hasattr(sys, "getandroidapilevel")
-                _old_getandroidapilevel = getattr(sys, "getandroidapilevel", None)
-                if _has_android_api:
-                    del sys.getandroidapilevel
+                # Reticulum's RNodeInterface checks os.environ for ANDROID_ARGUMENT or ANDROID_ROOT
+                # to determine if it's running on Android. We temporarily hide these to bypass the check.
+                _has_android_arg = "ANDROID_ARGUMENT" in os.environ
+                _old_android_arg = os.environ.get("ANDROID_ARGUMENT")
+                if _has_android_arg:
+                    del os.environ["ANDROID_ARGUMENT"]
                     
-                _old_vendor_sys = None
-                _old_vendor_rel = None
-                try:
-                    import RNS
-                    if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
-                        _old_vendor_sys = RNS.vendor.platform.system
-                        _old_vendor_rel = RNS.vendor.platform.release
-                        RNS.vendor.platform.system = lambda: "Linux"
-                        RNS.vendor.platform.release = lambda: "generic"
-                except:
-                    pass
+                _has_android_root = "ANDROID_ROOT" in os.environ
+                _old_android_root = os.environ.get("ANDROID_ROOT")
+                if _has_android_root:
+                    del os.environ["ANDROID_ROOT"]
 
                 try:
                     active_ifac = RNodeInterface(RNS.Transport, ictx)
                 finally:
-                    # Restore platform
-                    p.system = _old_sys
-                    p.release = _old_rel
-                    if _has_android_api and _old_getandroidapilevel:
-                        sys.getandroidapilevel = _old_getandroidapilevel
-                    if _old_vendor_sys:
-                        try:
-                            RNS.vendor.platform.system = _old_vendor_sys
-                            RNS.vendor.platform.release = _old_vendor_rel
-                        except:
-                            pass
+                    # Restore environment variables
+                    if _has_android_arg:
+                        os.environ["ANDROID_ARGUMENT"] = _old_android_arg
+                    if _has_android_root:
+                        os.environ["ANDROID_ROOT"] = _old_android_root
                 
                 # RNodeInterface handles its own registration and mode
                 log(f"Interface Injection Done. Status: {active_ifac}")
