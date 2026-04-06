@@ -79,7 +79,8 @@ def start_rns(storage_path, callback_obj, nickname):
     
     try:
         import inspect
-        source = inspect.getsource(_orig_rnode_init)
+        from RNS.Interfaces.RNodeInterface import RNodeInterface
+        source = inspect.getsource(RNodeInterface.__init__)
         log(f"RNodeInterface.__init__ source:\n{source}")
     except Exception as e:
         log(f"Failed to get RNodeInterface source: {e}")
