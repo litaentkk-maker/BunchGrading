@@ -28,6 +28,8 @@ class RNodeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i("RNS_SERVICE", "Service onCreate - Starting Foreground")
+        initializePythonEnvironment()
         createNotificationChannel()
         
         val notification = NotificationCompat.Builder(this, "RNS_CHANNEL")
@@ -43,12 +45,18 @@ class RNodeService : Service() {
             startForeground(1, notification)
         }
 
-        if (!Python.isStarted()) Python.start(AndroidPlatform(this))
+        if (!Python.isStarted()) {
+            Log.i("RNS_SERVICE", "Starting Python Engine...")
+            Python.start(AndroidPlatform(this))
+        }
         serviceScope.launch { 
             try {
+                Log.i("RNS_SERVICE", "Initializing RNS Stack in Python...")
                 Python.getInstance().getModule("rns_bridge").callAttr("start_rns", filesDir.absolutePath, this@RNodeService, "Harvester")
+                onStatusUpdate("RNS Stack Initialized")
             } catch (e: Exception) {
                 Log.e("RNS_SERVICE", "Python Start Error", e)
+                onStatusUpdate("Python Error: ${e.message}")
             }
         }
     }
@@ -95,6 +103,10 @@ class RNodeService : Service() {
                         btSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
                         btSocket?.connect()
                         connected = true
+                    } catch (e: SecurityException) {
+                        Log.e("RNS_SERVICE", "Bluetooth Permission Denied", e)
+                        onStatusUpdate("Permission Denied: Bluetooth")
+                        throw e
                     } catch (e: Exception) {
                         Log.w("RNS_SERVICE", "UUID connection failed, trying reflection...")
                         try {
@@ -102,6 +114,10 @@ class RNodeService : Service() {
                             btSocket = m.invoke(device, 1) as BluetoothSocket
                             btSocket?.connect()
                             connected = true
+                        } catch (e2: SecurityException) {
+                            Log.e("RNS_SERVICE", "Bluetooth Permission Denied", e2)
+                            onStatusUpdate("Permission Denied: Bluetooth")
+                            throw e2
                         } catch (e2: Exception) {
                             Log.e("RNS_SERVICE", "Reflection connection failed too", e2)
                             retryCount++
@@ -161,22 +177,43 @@ class RNodeService : Service() {
                         try {
                             val buf = ByteArray(2048)
                             var r = 0
-                            while (isBridging && isActive && btIn.read(buf).also { r = it } != -1) {
-                                if (r > 0) { tcpOut.write(buf, 0, r); tcpOut.flush() }
+                            while (isBridging && isActive) {
+                                r = btIn.read(buf)
+                                if (r == -1) break
+                                if (r > 0) { 
+                                    tcpOut.write(buf, 0, r)
+                                    tcpOut.flush() 
+                                }
                             }
-                        } catch (e: Exception) { }
-                        finally { try { client.close() } catch (e: Exception) { } }
+                        } catch (e: Exception) {
+                            Log.e("RNS_SERVICE", "BT Read Error", e)
+                        } finally {
+                            Log.w("RNS_SERVICE", "BT Link Lost - Resetting Bridge")
+                            isBridging = false
+                            currentMac = ""
+                            onStatusUpdate("Connection Lost")
+                            try { client.close() } catch (e: Exception) { }
+                            try { btSocket?.close() } catch (e: Exception) { }
+                        }
                     }
 
                     launch {
                         try {
                             val buf = ByteArray(2048)
                             var r = 0
-                            while (isBridging && isActive && tcpIn.read(buf).also { r = it } != -1) {
-                                if (r > 0) { btOut.write(buf, 0, r); btOut.flush() }
+                            while (isBridging && isActive) {
+                                r = tcpIn.read(buf)
+                                if (r == -1) break
+                                if (r > 0) { 
+                                    btOut.write(buf, 0, r)
+                                    btOut.flush() 
+                                }
                             }
-                        } catch (e: Exception) { }
-                        finally { try { client.close() } catch (e: Exception) { } }
+                        } catch (e: Exception) {
+                            Log.e("RNS_SERVICE", "TCP Read Error", e)
+                        } finally {
+                            try { client.close() } catch (e: Exception) { }
+                        }
                     }
                 } catch (e: Exception) { break }
             }
@@ -236,5 +273,21 @@ class RNodeService : Service() {
     fun onStatusUpdate(msg: String) {
         Log.i("RNS_SERVICE", "Status: $msg")
         RNSPlugin.onStatusUpdate(msg)
+    }
+
+    private fun initializePythonEnvironment() {
+        try {
+            // Ensure Python is properly initialized
+            val pythonPath = filesDir.absolutePath + "/python"
+            val cachePath = cacheDir.absolutePath
+            
+            // Set required environment variables
+            System.setProperty("python.home", pythonPath)
+            System.setProperty("python.path", pythonPath)
+            
+            Log.d("RNS_SERVICE", "Python environment initialized: $pythonPath")
+        } catch (e: Exception) {
+            Log.e("RNS_SERVICE", "Failed to initialize Python environment", e)
+        }
     }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,14 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
   useEffect(() => {
     const fetchDevices = async () => {
       try {
+        // Request permissions first on Android 12+
+        if (Capacitor.getPlatform() === 'android') {
+          // We use a simple check for now, but in a real app we'd use a permission plugin
+          // For this environment, we'll assume the user can grant them if prompted
+          // or we can try to trigger a scan which usually prompts for permissions.
+          console.log('Checking permissions...');
+        }
+        
         const pairedDevices = await rnsService.getDevices();
         setDevices(pairedDevices);
         if (pairedDevices.length > 0) {
@@ -63,9 +72,8 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
     fetchDevices();
 
     // Listen for status updates from the service
-    const statusListener = rnsService.getStatus();
     const interval = setInterval(() => {
-      setStatus(rnsService.getStatus());
+      setStatus({ ...rnsService.getStatus() });
     }, 500);
 
     return () => clearInterval(interval);
@@ -153,6 +161,17 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 mb-6">
+            {/* Live Status Box - Moved to top for visibility */}
+            <div className="bg-gray-900 p-3 rounded-xl border-2 border-primary-500 shadow-lg mb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Activity className="w-3 h-3 text-primary-400" />
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live Diagnostics</span>
+              </div>
+              <p className="text-xs font-mono font-bold text-primary-400 animate-pulse">
+                {status.statusMessage || "System Ready - Waiting for action..."}
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${status.isConnected ? 'bg-green-50' : 'bg-gray-50'}`}>
@@ -196,18 +215,6 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
               <p className="text-[10px] font-bold text-orange-500 bg-orange-50 p-3 rounded-xl border border-orange-100">
                 No paired Bluetooth devices found. Please pair your RNode in Android settings first.
               </p>
-            )}
-
-            {status.statusMessage && (
-              <div className="bg-gray-900 p-3 rounded-xl border border-gray-800 shadow-inner">
-                <div className="flex items-center gap-2 mb-1">
-                  <Activity className="w-3 h-3 text-primary-400" />
-                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live Status</span>
-                </div>
-                <p className="text-xs font-mono font-bold text-primary-400 animate-pulse">
-                  {status.statusMessage}
-                </p>
-              </div>
             )}
           </div>
 

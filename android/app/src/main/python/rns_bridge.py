@@ -57,35 +57,48 @@ def log(msg):
 def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
     kotlin_callback = callback_obj
-    if is_rns_running and local_destination is not None: return RNS.hexrep(local_destination.hash, False)
+    if is_rns_running and local_destination is not None: 
+        return RNS.hexrep(local_destination.hash, False)
     
-    storage_path = str(storage_path)
-    os.environ["TMPDIR"] = os.path.join(storage_path, "cache")
-    rns_dir = os.path.join(storage_path, ".reticulum")
-    lxmf_dir = os.path.join(storage_path, ".lxmf")
-    for d in [os.environ["TMPDIR"], rns_dir, lxmf_dir]:
-        if not os.path.exists(d): os.makedirs(d)
-    
-    # Create a basic config if it doesn't exist
-    config_path = os.path.join(rns_dir, "config")
-    if not os.path.exists(config_path):
-        with open(config_path, "w") as f:
-            f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]\n")
-    
-    try: RNS.Reticulum(configdir=rns_dir)
-    except OSError: pass
-    
-    # Identity is stored in the root storage_path to keep it safe from config wipes
-    id_path = os.path.join(storage_path, "storage_identity")
-    local_id = RNS.Identity.from_file(id_path) if os.path.exists(id_path) else RNS.Identity()
-    if not os.path.exists(id_path): local_id.to_file(id_path)
-    
-    router = LXMRouter(identity=local_id, storagepath=lxmf_dir)
-    local_destination = router.register_delivery_identity(local_id, display_name=nickname)
-    router.register_delivery_callback(on_lxmf)
-    RNS.Transport.register_announce_handler(discovery_handler())
-    is_rns_running = True
-    return RNS.hexrep(local_destination.hash, False)
+    try:
+        storage_path = str(storage_path)
+        os.environ["TMPDIR"] = os.path.join(storage_path, "cache")
+        rns_dir = os.path.join(storage_path, ".reticulum")
+        lxmf_dir = os.path.join(storage_path, ".lxmf")
+        
+        # Ensure all directories exist with proper permissions
+        for d in [os.environ["TMPDIR"], rns_dir, lxmf_dir]:
+            if not os.path.exists(d):
+                os.makedirs(d, mode=0o755)
+        
+        # Create config if missing
+        config_path = os.path.join(rns_dir, "config")
+        if not os.path.exists(config_path):
+            with open(config_path, "w") as f:
+                f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]\n")
+        
+        # Initialize Reticulum
+        RNS.Reticulum(configdir=rns_dir)
+        
+        # Load or create identity
+        id_path = os.path.join(storage_path, "storage_identity")
+        local_id = RNS.Identity.from_file(id_path) if os.path.exists(id_path) else RNS.Identity()
+        if not os.path.exists(id_path):
+            local_id.to_file(id_path)
+        
+        # Setup router
+        router = LXMRouter(identity=local_id, storagepath=lxmf_dir)
+        local_destination = router.register_delivery_identity(local_id, display_name=nickname)
+        router.register_delivery_callback(on_lxmf)
+        RNS.Transport.register_announce_handler(discovery_handler())
+        is_rns_running = True
+        
+        log(f"RNS STARTED: {RNS.hexrep(local_destination.hash, False)}")
+        return RNS.hexrep(local_destination.hash, False)
+    except Exception as e:
+        log(f"FATAL ERROR starting RNS: {e}")
+        is_rns_running = False
+        return ""
 
 class discovery_handler:
     def __init__(self): self.aspect_filter = None

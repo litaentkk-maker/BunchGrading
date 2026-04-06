@@ -26,6 +26,7 @@ class RNSPlugin : Plugin() {
         private var instance: RNSPlugin? = null
         
         fun onStatusUpdate(message: String) {
+            android.util.Log.i("RNS_PLUGIN", "Emitting status update: $message")
             val ret = JSObject()
             ret.put("message", message)
             instance?.notifyListeners("onStatusUpdate", ret)
@@ -41,10 +42,22 @@ class RNSPlugin : Plugin() {
 
     override fun load() {
         instance = this
+        initializePythonEnvironment()
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(context))
         }
         python = Python.getInstance()
+    }
+
+    private fun initializePythonEnvironment() {
+        try {
+            val pythonPath = context.filesDir.absolutePath + "/python"
+            System.setProperty("python.home", pythonPath)
+            System.setProperty("python.path", pythonPath)
+            android.util.Log.d("RNS_PLUGIN", "Python environment initialized: $pythonPath")
+        } catch (e: Exception) {
+            android.util.Log.e("RNS_PLUGIN", "Failed to initialize Python environment", e)
+        }
     }
 
     @PluginMethod
