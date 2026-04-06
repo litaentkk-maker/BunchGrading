@@ -161,14 +161,14 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 mb-6">
-            {/* Live Status Box - Moved to top for visibility */}
-            <div className="bg-gray-900 p-3 rounded-xl border-2 border-primary-500 shadow-lg mb-2">
-              <div className="flex items-center gap-2 mb-1">
-                <Activity className="w-3 h-3 text-primary-400" />
-                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live Diagnostics</span>
+            {/* Live Status Box - High Contrast for visibility */}
+            <div className="bg-black p-4 rounded-2xl border-4 border-primary-500 shadow-2xl mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity className="w-4 h-4 text-primary-400" />
+                <span className="text-[10px] font-black text-white uppercase tracking-widest">Live System Diagnostics</span>
               </div>
-              <p className="text-xs font-mono font-bold text-primary-400 animate-pulse">
-                {status.statusMessage || "System Ready - Waiting for action..."}
+              <p className="text-sm font-mono font-bold text-primary-300 animate-pulse break-all">
+                {status.statusMessage || "SYSTEM READY - WAITING FOR ACTION..."}
               </p>
             </div>
 
@@ -295,7 +295,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
                 type="number" 
                 value={config.frequency}
                 onChange={(e) => setConfig({ ...config, frequency: parseInt(e.target.value) })}
-                className="rounded-xl border-gray-100 h-11 font-mono text-sm"
+                className="rounded-xl border-gray-200 h-11 font-mono text-sm text-gray-900 bg-white"
               />
             </div>
 
@@ -303,7 +303,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-gray-500">Bandwidth</Label>
                 <select 
-                  className="w-full h-11 rounded-xl border border-gray-100 bg-white px-3 text-sm font-bold"
+                  className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900"
                   value={config.bandwidth}
                   onChange={(e) => setConfig({ ...config, bandwidth: parseInt(e.target.value) })}
                 >
@@ -318,7 +318,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
                   type="number" 
                   value={config.txPower}
                   onChange={(e) => setConfig({ ...config, txPower: parseInt(e.target.value) })}
-                  className="rounded-xl border-gray-100 h-11 font-mono text-sm"
+                  className="rounded-xl border-gray-200 h-11 font-mono text-sm text-gray-900 bg-white"
                 />
               </div>
             </div>
@@ -327,7 +327,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-gray-500">Spreading Factor</Label>
                 <select 
-                  className="w-full h-11 rounded-xl border border-gray-100 bg-white px-3 text-sm font-bold"
+                  className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900"
                   value={config.spreadingFactor}
                   onChange={(e) => setConfig({ ...config, spreadingFactor: parseInt(e.target.value) })}
                 >
@@ -339,7 +339,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-gray-500">Coding Rate</Label>
                 <select 
-                  className="w-full h-11 rounded-xl border border-gray-100 bg-white px-3 text-sm font-bold"
+                  className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold text-gray-900"
                   value={config.codingRate}
                   onChange={(e) => setConfig({ ...config, codingRate: parseInt(e.target.value) })}
                 >
@@ -374,7 +374,7 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
                 <Send className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
                 <Input 
                   placeholder="e.g. 8b4f2c..." 
-                  className="pl-10 h-12 rounded-xl border-gray-100 font-mono text-sm"
+                  className="pl-10 h-12 rounded-xl border-gray-200 font-mono text-sm text-gray-900 bg-white"
                   value={config.destinationHex}
                   onChange={(e) => setConfig({ ...config, destinationHex: e.target.value })}
                 />

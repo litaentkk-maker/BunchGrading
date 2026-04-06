@@ -253,5 +253,11 @@ class RNSPlugin : Plugin() {
             ret.put("hash", hash)
             notifyListeners("onMessageDelivered", ret)
         }
+
+        fun onStatusUpdate(message: String) {
+            val ret = JSObject()
+            ret.put("message", message)
+            notifyListeners("onStatusUpdate", ret)
+        }
     }
 }

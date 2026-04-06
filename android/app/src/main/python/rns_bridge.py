@@ -53,6 +53,11 @@ router = None; local_destination = None; kotlin_callback = None; is_rns_running 
 def log(msg):
     print(f"RNS-LOG: {msg}")
     sys.stdout.flush()
+    if kotlin_callback:
+        try:
+            kotlin_callback.onStatusUpdate(msg)
+        except Exception:
+            pass
 
 def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
