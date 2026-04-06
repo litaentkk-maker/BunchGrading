@@ -102,12 +102,25 @@ def start_rns(storage_path, callback_obj, nickname):
                 log(f"Creating directory: {d}")
                 os.makedirs(d, mode=0o755)
         
-        # Create config if missing
+        # Create or overwrite config
         config_path = os.path.join(rns_dir, "config")
-        if not os.path.exists(config_path):
-            log(f"Creating default config at: {config_path}")
-            with open(config_path, "w") as f:
-                f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]\n")
+        log(f"Writing Reticulum config at: {config_path}")
+        with open(config_path, "w") as f:
+            f.write("""[reticulum]
+enable_transport = True
+share_instance = No
+
+[interfaces]
+  # Explicitly disable automatic interface discovery and add a dummy/disabled UDPInterface
+  # to prevent port binding conflicts common on Android.
+  [[DummyUDP]]
+    type = UDPInterface
+    interface_enabled = False
+    listen_ip = 127.0.0.1
+    listen_port = 4242
+    forward_ip = 127.0.0.1
+    forward_port = 4242
+""")
         
         # Initialize Reticulum
         log("Initializing Reticulum stack (this may take a moment)...")
@@ -199,13 +212,13 @@ def inject_rnode(freq, bw, tx, sf, cr):
             except Exception as e:
                 log(f"Error removing old interface: {e}")
 
-        # Use RNodeInterface with a tcp:// URL to talk to our local bridge
+        # Use RNodeInterface with a socket:// URL to talk to our local bridge
         # This allows RNS to handle KISS framing and RNode configuration
         ictx = {
             "name": "RNodeBridge", 
             "type": "RNodeInterface", 
             "interface_enabled": True, 
-            "port": "tcp://127.0.0.1:7633",
+            "port": "socket://127.0.0.1:7633",
             "frequency": freq,
             "bandwidth": bw,
             "txpower": tx,
@@ -213,7 +226,7 @@ def inject_rnode(freq, bw, tx, sf, cr):
             "codingrate": cr,
             "flow_control": False
         }
-        log(f"Injecting RNode interface via tcp://127.0.0.1:7633")
+        log(f"Injecting RNode interface via socket://127.0.0.1:7633")
         
         # We use a retry loop to ensure the Kotlin TCP server is ready
         retries = 5
@@ -232,9 +245,24 @@ def inject_rnode(freq, bw, tx, sf, cr):
                 if _has_android_root:
                     del os.environ["ANDROID_ROOT"]
 
+                # --- SERIAL MONKEYPATCH ---
+                # Reticulum 0.9.1 doesn't support tcp:// or socket:// natively in RNodeInterface.
+                # It passes the port string directly to serial.Serial().
+                # We monkeypatch serial.Serial to intercept socket:// and use serial_for_url instead.
+                import serial
+                _orig_serial = serial.Serial
+                def _patched_serial(*args, **kwargs):
+                    port = kwargs.get('port') or (args[0] if args else None)
+                    if port and str(port).startswith("socket://"):
+                        return serial.serial_for_url(*args, **kwargs)
+                    return _orig_serial(*args, **kwargs)
+                serial.Serial = _patched_serial
+
                 try:
                     active_ifac = RNodeInterface(RNS.Transport, ictx)
                 finally:
+                    # Restore serial
+                    serial.Serial = _orig_serial
                     # Restore environment variables
                     if _has_android_arg:
                         os.environ["ANDROID_ARGUMENT"] = _old_android_arg

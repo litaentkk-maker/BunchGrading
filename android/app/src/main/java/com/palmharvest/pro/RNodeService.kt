@@ -26,6 +26,7 @@ class RNodeService : Service() {
     private var tcpServer: ServerSocket? = null
     private var isBridging = false
     private var currentMac = ""
+    private var bridgeJob: Job? = null
     private var rnsReady = false
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
@@ -83,7 +84,8 @@ class RNodeService : Service() {
     }
 
     private fun startBridge(mac: String) {
-        serviceScope.launch(Dispatchers.IO) {
+        bridgeJob?.cancel()
+        bridgeJob = serviceScope.launch(Dispatchers.IO) {
             try {
                 Log.i("RNS_SERVICE", "Connecting BT to $mac...")
                 onStatusUpdate("Connecting to RNode...")
@@ -105,7 +107,9 @@ class RNodeService : Service() {
                     Log.w("RNS_SERVICE", "Error closing old socket: ${e.message}")
                 }
                 btSocket = null
-                tcpServer?.close()
+                try {
+                    tcpServer?.close()
+                } catch (e: Exception) { }
                 tcpServer = null
                 delay(2000) // Longer delay to let BT stack settle
                 
