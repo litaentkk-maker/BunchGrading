@@ -9,16 +9,6 @@ import os, sys, time, base64, signal, warnings, json, platform
 platform.system = lambda: "Linux"
 sys.platform = "linux"
 
-# We also need to patch RNS internal platform detection if it exists
-try:
-    import RNS
-    if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
-        RNS.vendor.platform.system = lambda: "Linux"
-    if hasattr(RNS, "Platform"):
-        RNS.Platform.is_android = lambda: False
-except:
-    pass
-
 from types import ModuleType
 import importlib.util, importlib.machinery
 
@@ -79,6 +69,50 @@ def log(msg):
             kotlin_callback.onStatusUpdate(msg)
         except Exception:
             pass
+
+# Aggressively patch RNodeInterface to bypass the Android check
+try:
+    from RNS.Interfaces.RNodeInterface import RNodeInterface
+    _orig_rnode_init = RNodeInterface.__init__
+    def _patched_rnode_init(self, owner, configuration):
+        # Temporarily force platform to Linux during init to bypass the check
+        import platform as p
+        _old_sys = p.system
+        p.system = lambda: "Linux"
+        
+        # Also patch RNS.vendor.platform if it exists
+        _old_vendor_sys = None
+        try:
+            import RNS
+            if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
+                _old_vendor_sys = RNS.vendor.platform.system
+                RNS.vendor.platform.system = lambda: "Linux"
+        except:
+            pass
+
+        try:
+            _orig_rnode_init(self, owner, configuration)
+        finally:
+            p.system = _old_sys
+            if _old_vendor_sys:
+                try:
+                    RNS.vendor.platform.system = _old_vendor_sys
+                except:
+                    pass
+    RNodeInterface.__init__ = _patched_rnode_init
+    log("Successfully monkeypatched RNodeInterface.__init__")
+except Exception as e:
+    log(f"Failed to monkeypatch RNodeInterface: {e}")
+
+# We also need to patch RNS internal platform detection if it exists
+try:
+    import RNS
+    if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
+        RNS.vendor.platform.system = lambda: "Linux"
+    if hasattr(RNS, "Platform"):
+        RNS.Platform.is_android = lambda: False
+except:
+    pass
 
 def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
