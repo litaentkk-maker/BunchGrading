@@ -132,7 +132,7 @@ export default function EntryPage({ photoData, initialBunchCount, collectionPoin
                       setBunchCount(1);
                     }
                   }}
-                  className="h-12 rounded-xl border-gray-200 font-bold text-lg focus:ring-primary-500"
+                  className="h-12 rounded-xl border-gray-200 font-bold text-lg focus:ring-primary-500 text-gray-900 bg-white"
                 />
               </div>
               <div className="flex gap-2 mt-5">

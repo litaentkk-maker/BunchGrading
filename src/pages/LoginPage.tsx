@@ -77,7 +77,7 @@ export default function LoginPage({ onLogin, onRegister, onResetPassword }: Logi
                     id="reset-email" 
                     type="email" 
                     placeholder="name@company.com" 
-                    className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500"
+                    className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500 text-gray-900 bg-white"
                     value={email ?? ''}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -125,7 +125,7 @@ export default function LoginPage({ onLogin, onRegister, onResetPassword }: Logi
                   <Input 
                     id="reg-name" 
                     placeholder="John Doe" 
-                    className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500"
+                    className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500 text-gray-900 bg-white"
                     value={name ?? ''}
                     onChange={(e) => setName(e.target.value)}
                     required={isRegistering}
@@ -142,7 +142,7 @@ export default function LoginPage({ onLogin, onRegister, onResetPassword }: Logi
                   id="email" 
                   type="email" 
                   placeholder="name@company.com" 
-                  className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500"
+                  className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500 text-gray-900 bg-white"
                   value={email ?? ''}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -163,7 +163,7 @@ export default function LoginPage({ onLogin, onRegister, onResetPassword }: Logi
                   id="password" 
                   type="password" 
                   placeholder="••••••••" 
-                  className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500"
+                  className="pl-10 h-12 rounded-xl border-gray-200 focus:ring-primary-500 text-gray-900 bg-white"
                   value={password ?? ''}
                   onChange={(e) => setPassword(e.target.value)}
                   required

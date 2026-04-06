@@ -157,21 +157,23 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
         </div>
       </div>
 
+      {/* GLOBAL DIAGNOSTICS - MOVED TO TOP FOR ABSOLUTE VISIBILITY */}
+      <div className="bg-black p-4 rounded-3xl border-4 border-green-500 shadow-2xl ring-4 ring-black/20">
+        <div className="flex items-center gap-2 mb-2">
+          <Activity className="w-5 h-5 text-green-400" />
+          <span className="text-[11px] font-black text-white uppercase tracking-widest">System Live Diagnostics</span>
+        </div>
+        <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800">
+          <p className="text-sm font-mono font-bold text-green-400 animate-pulse break-all leading-relaxed">
+            {status.statusMessage || "SYSTEM READY - WAITING FOR ACTION..."}
+          </p>
+        </div>
+      </div>
+
       {/* Connection Status */}
       <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 mb-6">
-            {/* Live Status Box - High Contrast for visibility */}
-            <div className="bg-black p-4 rounded-2xl border-4 border-primary-500 shadow-2xl mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Activity className="w-4 h-4 text-primary-400" />
-                <span className="text-[10px] font-black text-white uppercase tracking-widest">Live System Diagnostics</span>
-              </div>
-              <p className="text-sm font-mono font-bold text-primary-300 animate-pulse break-all">
-                {status.statusMessage || "SYSTEM READY - WAITING FOR ACTION..."}
-              </p>
-            </div>
-
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${status.isConnected ? 'bg-green-50' : 'bg-gray-50'}`}>
