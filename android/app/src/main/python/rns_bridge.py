@@ -7,6 +7,17 @@ import os, sys, time, base64, signal, warnings, json, platform
 # works perfectly with the standard RNodeInterface. We bypass this check
 # by making Reticulum think it's running on Linux.
 platform.system = lambda: "Linux"
+sys.platform = "linux"
+
+# We also need to patch RNS internal platform detection if it exists
+try:
+    import RNS
+    if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
+        RNS.vendor.platform.system = lambda: "Linux"
+    if hasattr(RNS, "Platform"):
+        RNS.Platform.is_android = lambda: False
+except:
+    pass
 
 from types import ModuleType
 import importlib.util, importlib.machinery
@@ -73,6 +84,7 @@ def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
     kotlin_callback = callback_obj
     log(f"start_rns() called with storage_path: {storage_path}")
+    log(f"DIAGNOSTIC: platform.system()={platform.system()}, sys.platform={sys.platform}")
     
     if is_rns_running and local_destination is not None: 
         log("RNS already running, returning existing hash")
