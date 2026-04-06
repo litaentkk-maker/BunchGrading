@@ -30,6 +30,13 @@ class RNSService {
       RNSPlugin.addListener('onNewMessage', (data) => {
         console.log('New message:', data);
       });
+      RNSPlugin.addListener('onStatusUpdate', (data: { message: string }) => {
+        console.log('Status update:', data.message);
+        this.status = {
+          ...this.status,
+          statusMessage: data.message
+        };
+      });
     }
   }
 

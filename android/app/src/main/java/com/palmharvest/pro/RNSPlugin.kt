@@ -22,6 +22,15 @@ import kotlin.concurrent.thread
 
 @CapacitorPlugin(name = "RNSPlugin")
 class RNSPlugin : Plugin() {
+    companion object {
+        private var instance: RNSPlugin? = null
+        
+        fun onStatusUpdate(message: String) {
+            val ret = JSObject()
+            ret.put("message", message)
+            instance?.notifyListeners("onStatusUpdate", ret)
+        }
+    }
 
     private var python: Python? = null
     private var bridgeThread: Thread? = null
@@ -31,6 +40,7 @@ class RNSPlugin : Plugin() {
     private var tcpSocket: Socket? = null
 
     override fun load() {
+        instance = this
         if (!Python.isStarted()) {
             Python.start(AndroidPlatform(context))
         }

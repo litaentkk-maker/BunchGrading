@@ -37,4 +37,5 @@ export interface RNSStatus {
   localHash?: string;
   lastAnnounce?: number;
   device?: string;
+  statusMessage?: string;
 }

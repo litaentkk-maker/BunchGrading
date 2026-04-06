@@ -67,10 +67,12 @@ class RNodeService : Service() {
         serviceScope.launch(Dispatchers.IO) {
             try {
                 Log.i("RNS_SERVICE", "Connecting BT to $mac...")
+                onStatusUpdate("Connecting to Bluetooth...")
                 
                 // If we're already bridging to this MAC, don't close everything
                 if (mac == currentMac && isBridging && btSocket?.isConnected == true) {
                     Log.i("RNS_SERVICE", "Already connected to $mac, skipping bridge restart")
+                    onStatusUpdate("Already Connected")
                     return@launch
                 }
 
@@ -89,6 +91,7 @@ class RNodeService : Service() {
                 while (!connected && retryCount < 2) {
                     try {
                         Log.i("RNS_SERVICE", "Connection attempt ${retryCount + 1}")
+                        onStatusUpdate("BT Attempt ${retryCount + 1}...")
                         btSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
                         btSocket?.connect()
                         connected = true
@@ -102,13 +105,20 @@ class RNodeService : Service() {
                         } catch (e2: Exception) {
                             Log.e("RNS_SERVICE", "Reflection connection failed too", e2)
                             retryCount++
-                            if (retryCount < 2) delay(2000)
+                            if (retryCount < 2) {
+                                onStatusUpdate("Retrying BT in 2s...")
+                                delay(2000)
+                            }
                         }
                     }
                 }
                 
-                if (!connected) throw Exception("Failed to connect to RNode after retries")
+                if (!connected) {
+                    onStatusUpdate("BT Connection Failed")
+                    throw Exception("Failed to connect to RNode after retries")
+                }
 
+                onStatusUpdate("BT Connected. Starting TCP...")
                 tcpServer = ServerSocket()
                 tcpServer?.reuseAddress = true
                 tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
@@ -118,15 +128,18 @@ class RNodeService : Service() {
                 getSharedPreferences("rns_database", Context.MODE_PRIVATE).edit().putString("last_mac", mac).apply()
                 
                 Log.i("RNS_SERVICE", "Bridge 7633 Ready for $mac")
+                onStatusUpdate("Bridge Ready (7633)")
 
                 launch { handleTcpClients() }
                 delay(1000)
+                onStatusUpdate("Injecting RNode to Python...")
                 injectPython()
 
             } catch (e: Exception) { 
                 currentMac = "" 
                 isBridging = false
                 Log.e("RNS_SERVICE", "BT Bridge failed", e)
+                onStatusUpdate("Error: ${e.message}")
             }
         }
     }
@@ -222,5 +235,6 @@ class RNodeService : Service() {
 
     fun onStatusUpdate(msg: String) {
         Log.i("RNS_SERVICE", "Status: $msg")
+        RNSPlugin.onStatusUpdate(msg)
     }
 }

@@ -61,6 +61,14 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       }
     };
     fetchDevices();
+
+    // Listen for status updates from the service
+    const statusListener = rnsService.getStatus();
+    const interval = setInterval(() => {
+      setStatus(rnsService.getStatus());
+    }, 500);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleConnect = async () => {
@@ -188,6 +196,18 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
               <p className="text-[10px] font-bold text-orange-500 bg-orange-50 p-3 rounded-xl border border-orange-100">
                 No paired Bluetooth devices found. Please pair your RNode in Android settings first.
               </p>
+            )}
+
+            {status.statusMessage && (
+              <div className="bg-gray-900 p-3 rounded-xl border border-gray-800 shadow-inner">
+                <div className="flex items-center gap-2 mb-1">
+                  <Activity className="w-3 h-3 text-primary-400" />
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live Status</span>
+                </div>
+                <p className="text-xs font-mono font-bold text-primary-400 animate-pulse">
+                  {status.statusMessage}
+                </p>
+              </div>
             )}
           </div>
 
