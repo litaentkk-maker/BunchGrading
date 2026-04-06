@@ -55,7 +55,9 @@ class RNodeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val mac = intent?.getStringExtra("mac") ?: getSharedPreferences("rns_database", Context.MODE_PRIVATE).getString("last_mac", "") ?: ""
-        if (mac.isNotEmpty() && mac != currentMac) {
+        
+        // Only start bridge if MAC is different OR if bridge is not active
+        if (mac.isNotEmpty() && (mac != currentMac || !isBridging || btSocket?.isConnected != true)) {
             startBridge(mac)
         }
         return START_STICKY
@@ -65,6 +67,13 @@ class RNodeService : Service() {
         serviceScope.launch(Dispatchers.IO) {
             try {
                 Log.i("RNS_SERVICE", "Connecting BT to $mac...")
+                
+                // If we're already bridging to this MAC, don't close everything
+                if (mac == currentMac && isBridging && btSocket?.isConnected == true) {
+                    Log.i("RNS_SERVICE", "Already connected to $mac, skipping bridge restart")
+                    return@launch
+                }
+
                 isBridging = false
                 btSocket?.close()
                 tcpServer?.close()
@@ -75,16 +84,31 @@ class RNodeService : Service() {
                 val device = adapter.getRemoteDevice(mac)
                 
                 // Try UUID first, then reflection as fallback
-                try {
-                    btSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-                    btSocket?.connect()
-                } catch (e: Exception) {
-                    Log.w("RNS_SERVICE", "UUID connection failed, trying reflection...")
-                    val m = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
-                    btSocket = m.invoke(device, 1) as BluetoothSocket
-                    btSocket?.connect()
+                var connected = false
+                var retryCount = 0
+                while (!connected && retryCount < 2) {
+                    try {
+                        Log.i("RNS_SERVICE", "Connection attempt ${retryCount + 1}")
+                        btSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+                        btSocket?.connect()
+                        connected = true
+                    } catch (e: Exception) {
+                        Log.w("RNS_SERVICE", "UUID connection failed, trying reflection...")
+                        try {
+                            val m = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
+                            btSocket = m.invoke(device, 1) as BluetoothSocket
+                            btSocket?.connect()
+                            connected = true
+                        } catch (e2: Exception) {
+                            Log.e("RNS_SERVICE", "Reflection connection failed too", e2)
+                            retryCount++
+                            if (retryCount < 2) delay(2000)
+                        }
+                    }
                 }
                 
+                if (!connected) throw Exception("Failed to connect to RNode after retries")
+
                 tcpServer = ServerSocket()
                 tcpServer?.reuseAddress = true
                 tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
@@ -101,6 +125,7 @@ class RNodeService : Service() {
 
             } catch (e: Exception) { 
                 currentMac = "" 
+                isBridging = false
                 Log.e("RNS_SERVICE", "BT Bridge failed", e)
             }
         }

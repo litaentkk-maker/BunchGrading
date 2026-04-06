@@ -47,6 +47,7 @@ from LXMF import LXMRouter, LXMessage
 from RNS.Interfaces.RNodeInterface import RNodeInterface
 from RNS.Interfaces.Interface import Interface
 
+active_ifac = None
 router = None; local_destination = None; kotlin_callback = None; is_rns_running = False
 
 def log(msg):
@@ -121,8 +122,19 @@ def inject_rnode_json(params_json):
         return str(e)
 
 def inject_rnode(freq, bw, tx, sf, cr):
+    global active_ifac
     log(f"TUNING: F:{freq} BW:{bw} SF:{sf} CR:{cr}")
     try:
+        # Remove old interface if it exists
+        if active_ifac is not None:
+            try:
+                log("Removing old interface...")
+                if active_ifac in RNS.Transport.interfaces:
+                    RNS.Transport.interfaces.remove(active_ifac)
+                active_ifac.detach()
+            except Exception as e:
+                log(f"Error removing old interface: {e}")
+
         # Use the standard RNodeInterface and point it to our local TCP bridge
         # We provide both 'port' and 'tcp_host/port' for maximum compatibility across RNS versions
         ictx = {
@@ -140,10 +152,10 @@ def inject_rnode(freq, bw, tx, sf, cr):
             "codingrate": int(cr), 
             "flow_control": False
         }
-        ifac = RNodeInterface(RNS.Transport, ictx)
-        ifac.mode = Interface.MODE_FULL
-        ifac.IN = True; ifac.OUT = True
-        RNS.Transport.interfaces.append(ifac)
+        active_ifac = RNodeInterface(RNS.Transport, ictx)
+        active_ifac.mode = Interface.MODE_FULL
+        active_ifac.IN = True; active_ifac.OUT = True
+        RNS.Transport.interfaces.append(active_ifac)
         log("Interface Injection Done.")
         return "ONLINE"
     except Exception as e: 
