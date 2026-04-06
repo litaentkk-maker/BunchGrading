@@ -142,7 +142,7 @@ def inject_rnode_json(params_json):
 
 def inject_rnode(freq, bw, tx, sf, cr):
     global active_ifac
-    log(f"TUNING: F:{freq} BW:{bw} SF:{sf} CR:{cr}")
+    log(f"inject_rnode() CALLED - F:{freq} BW:{bw} SF:{sf} CR:{cr}")
     try:
         # Remove old interface if it exists
         if active_ifac is not None:

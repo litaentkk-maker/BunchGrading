@@ -15,6 +15,8 @@ import android.os.Build
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.json.JSONObject
 import java.util.UUID
 
@@ -62,6 +64,12 @@ class RNodeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == "INJECT_CONFIG") {
+            injectPython()
+            return START_STICKY
+        }
+
         val mac = intent?.getStringExtra("mac") ?: getSharedPreferences("rns_database", Context.MODE_PRIVATE).getString("last_mac", "") ?: ""
         
         // Only start bridge if MAC is different OR if bridge is not active
@@ -138,12 +146,13 @@ class RNodeService : Service() {
                     throw Exception("Failed to connect to RNode after retries")
                 }
 
+                Log.i("RNS_SERVICE", "BT Connected. Starting TCP Server on 7633...")
                 onStatusUpdate("BT Connected. Starting TCP...")
                 isBridging = true
                 currentMac = mac
                 getSharedPreferences("rns_database", Context.MODE_PRIVATE).edit().putString("last_mac", mac).apply()
                 
-                Log.i("RNS_SERVICE", "Bridge Ready for $mac")
+                Log.i("RNS_SERVICE", "Launching handleTcpClients coroutine...")
                 launch { handleTcpClients() }
 
             } catch (e: Exception) { 
@@ -160,21 +169,28 @@ class RNodeService : Service() {
             try {
                 tcpServer = ServerSocket()
                 tcpServer?.reuseAddress = true
+                tcpServer?.soTimeout = 30000 // 30 second timeout for accept
                 tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
                 Log.i("RNS_BRIDGE", "TCP Bridge Server listening on 127.0.0.1:7633")
                 
                 while (isBridging && isActive) {
                     try {
-                        Log.i("RNS_SERVICE", "TCP Server: Waiting for Python client on port 7633...")
+                        Log.i("RNS_SERVICE", "TCP Server: Calling accept() - waiting for Python...")
+                        onStatusUpdate("Waiting for Python Bridge...")
+                        
+                        // We trigger Python injection JUST BEFORE accept to minimize race window
+                        // but Python will retry if it beats us.
+                        launch {
+                            delay(500)
+                            Log.i("RNS_SERVICE", "Triggering injectPython()...")
+                            injectPython()
+                        }
+
                         val client = tcpServer?.accept() ?: break
                         client.tcpNoDelay = true
                         Log.i("RNS_SERVICE", "TCP Server: Python client connected from ${client.inetAddress}")
                         onStatusUpdate("RNode Bridge Connected")
                         
-                        // Inject RNode to Python AFTER TCP client has connected
-                        onStatusUpdate("Injecting RNode to Python...")
-                        injectPython()
-
                         val btIn = btSocket!!.inputStream
                         val btOut = btSocket!!.outputStream
                         val tcpIn = client.inputStream
@@ -293,7 +309,7 @@ class RNodeService : Service() {
 
     fun onStatusUpdate(msg: String) {
         Log.i("RNS_SERVICE", "Status: $msg")
-        RNSPlugin.onStatusUpdate(msg)
+        emitStatus(msg)
     }
 
     private fun initializePythonEnvironment() {
@@ -309,6 +325,18 @@ class RNodeService : Service() {
             Log.d("RNS_SERVICE", "Python environment initialized: $pythonPath")
         } catch (e: Exception) {
             Log.e("RNS_SERVICE", "Failed to initialize Python environment", e)
+        }
+    }
+
+    companion object {
+        val statusFlow = MutableSharedFlow<String>(
+            replay = 1,
+            extraBufferCapacity = 10,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+
+        fun emitStatus(msg: String) {
+            statusFlow.tryEmit(msg)
         }
     }
 }

@@ -89,6 +89,31 @@ fun RNSScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // Live Diagnostics Box (Always Visible)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Black),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Terminal, contentDescription = null, tint = Color.Green, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("LIVE SYSTEM DIAGNOSTICS", style = MaterialTheme.typography.labelSmall, color = Color.Green, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = rnsStatus.statusMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Green,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         // Connection Status Card
         Card(
             modifier = Modifier.fillMaxWidth(),
