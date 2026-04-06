@@ -199,13 +199,13 @@ def inject_rnode(freq, bw, tx, sf, cr):
             except Exception as e:
                 log(f"Error removing old interface: {e}")
 
-        # Use RNodeInterface with a socket:// URL to talk to our local bridge
+        # Use RNodeInterface with a tcp:// URL to talk to our local bridge
         # This allows RNS to handle KISS framing and RNode configuration
         ictx = {
             "name": "RNodeBridge", 
             "type": "RNodeInterface", 
             "interface_enabled": True, 
-            "port": "socket://127.0.0.1:7633",
+            "port": "tcp://127.0.0.1:7633",
             "frequency": freq,
             "bandwidth": bw,
             "txpower": tx,
@@ -213,7 +213,7 @@ def inject_rnode(freq, bw, tx, sf, cr):
             "codingrate": cr,
             "flow_control": False
         }
-        log(f"Injecting RNode interface via socket://127.0.0.1:7633")
+        log(f"Injecting RNode interface via tcp://127.0.0.1:7633")
         
         # We use a retry loop to ensure the Kotlin TCP server is ready
         retries = 5
