@@ -34,7 +34,7 @@ subprojects {
                 }
             }
         }
-        if (project.name == 'capacitor-bluetooth-serial') {
+        if (project.name == 'capacitor-bluetooth-serial' && project.hasProperty('android')) {
             project.android {
                 namespace "com.bluetoothserial.plugin.capacitorbluetoothserial"
             }
