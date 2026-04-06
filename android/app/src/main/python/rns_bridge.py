@@ -143,6 +143,18 @@ def inject_rnode_json(params_json):
 def inject_rnode(freq, bw, tx, sf, cr):
     global active_ifac
     log(f"inject_rnode() CALLED - F:{freq} BW:{bw} SF:{sf} CR:{cr}")
+    
+    # Wait for RNS to be fully started
+    waited = 0
+    while not is_rns_running and waited < 30:
+        log(f"Waiting for RNS to start... ({waited}s)")
+        time.sleep(1)
+        waited += 1
+    
+    if not is_rns_running:
+        log("FATAL: RNS never started, cannot inject interface")
+        return "RNS_NOT_READY"
+
     try:
         # Remove old interface if it exists
         if active_ifac is not None:
@@ -154,29 +166,29 @@ def inject_rnode(freq, bw, tx, sf, cr):
             except Exception as e:
                 log(f"Error removing old interface: {e}")
 
-        # Use the standard TCPClientInterface to connect to our local bridge
+        # Use RNodeInterface with a socket:// URL to talk to our local bridge
+        # This allows RNS to handle KISS framing and RNode configuration
         ictx = {
-            "name": "Bridge", 
-            "type": "TCPClientInterface", 
+            "name": "RNodeBridge", 
+            "type": "RNodeInterface", 
             "interface_enabled": True, 
-            "outgoing": True,
-            "target_host": "127.0.0.1",
-            "target_port": 7633
+            "port": "socket://127.0.0.1:7633",
+            "frequency": freq,
+            "bandwidth": bw,
+            "txpower": tx,
+            "spreadingfactor": sf,
+            "codingrate": cr,
+            "flow_control": False
         }
-        log(f"Injecting TCP interface via 127.0.0.1:7633")
+        log(f"Injecting RNode interface via socket://127.0.0.1:7633")
         
         # We use a retry loop to ensure the Kotlin TCP server is ready
         retries = 5
         while retries > 0:
             try:
-                active_ifac = TCPClientInterface(RNS.Transport, ictx)
-                active_ifac.mode = Interface.MODE_FULL
-                active_ifac.IN = True; active_ifac.OUT = True
+                active_ifac = RNodeInterface(RNS.Transport, ictx)
                 
-                # Manually add to transport if not already there
-                if active_ifac not in RNS.Transport.interfaces:
-                    RNS.Transport.interfaces.append(active_ifac)
-                
+                # RNodeInterface handles its own registration and mode
                 log(f"Interface Injection Done. Status: {active_ifac}")
                 break
             except Exception as e:

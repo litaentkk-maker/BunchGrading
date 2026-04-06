@@ -26,6 +26,7 @@ class RNodeService : Service() {
     private var tcpServer: ServerSocket? = null
     private var isBridging = false
     private var currentMac = ""
+    private var rnsReady = false
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
     override fun onCreate() {
@@ -54,8 +55,10 @@ class RNodeService : Service() {
         serviceScope.launch { 
             try {
                 Log.i("RNS_SERVICE", "Initializing RNS Stack in Python...")
-                Python.getInstance().getModule("rns_bridge").callAttr("start_rns", filesDir.absolutePath, this@RNodeService, "Harvester")
-                onStatusUpdate("RNS Stack Initialized")
+                val hash = Python.getInstance().getModule("rns_bridge").callAttr("start_rns", filesDir.absolutePath, this@RNodeService, "Harvester")?.toString()
+                rnsReady = true
+                Log.i("RNS_SERVICE", "RNS Ready, hash=$hash")
+                onStatusUpdate("RNS Stack Initialized: $hash")
             } catch (e: Exception) {
                 Log.e("RNS_SERVICE", "Python Start Error", e)
                 onStatusUpdate("Python Error: ${e.message}")
@@ -178,12 +181,21 @@ class RNodeService : Service() {
                         Log.i("RNS_SERVICE", "TCP Server: Calling accept() - waiting for Python...")
                         onStatusUpdate("Waiting for Python Bridge...")
                         
-                        // We trigger Python injection JUST BEFORE accept to minimize race window
-                        // but Python will retry if it beats us.
-                        launch {
-                            delay(500)
-                            Log.i("RNS_SERVICE", "Triggering injectPython()...")
-                            injectPython()
+                        // Wait for RNS to be ready, then inject
+                        serviceScope.launch {
+                            var waited = 0
+                            while (!rnsReady && waited < 30) {
+                                delay(1000)
+                                waited++
+                                Log.i("RNS_SERVICE", "Waiting for RNS ready... ($waited)")
+                            }
+                            if (rnsReady) {
+                                Log.i("RNS_SERVICE", "RNS ready, injecting Python interface")
+                                injectPython()
+                            } else {
+                                Log.e("RNS_SERVICE", "Timed out waiting for RNS")
+                                onStatusUpdate("RNS Init Timeout")
+                            }
                         }
 
                         val client = tcpServer?.accept() ?: break
