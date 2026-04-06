@@ -84,56 +84,51 @@ class RNodeService : Service() {
                     return@launch
                 }
 
+                // Aggressively close everything
                 isBridging = false
-                btSocket?.close()
+                try {
+                    btSocket?.inputStream?.close()
+                    btSocket?.outputStream?.close()
+                    btSocket?.close()
+                } catch (e: Exception) {
+                    Log.w("RNS_SERVICE", "Error closing old socket: ${e.message}")
+                }
+                btSocket = null
                 tcpServer?.close()
-                delay(1000)
+                tcpServer = null
+                delay(2000) // Longer delay to let BT stack settle
                 
                 val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
                 val adapter = bluetoothManager.adapter
+                if (adapter == null || !adapter.isEnabled) {
+                    onStatusUpdate("Bluetooth is Disabled")
+                    return@launch
+                }
                 val device = adapter.getRemoteDevice(mac)
                 
                 // Try Insecure UUID first (best for RNodes), then reflection as fallback
                 var connected = false
                 var retryCount = 0
-                while (!connected && retryCount < 2) {
+                while (!connected && retryCount < 3) {
                     try {
-                        Log.i("RNS_SERVICE", "Connection attempt ${retryCount + 1}")
+                        Log.i("RNS_SERVICE", "Connection attempt ${retryCount + 1} to $mac")
                         onStatusUpdate("BT Attempt ${retryCount + 1}...")
                         
                         btSocket?.close()
-                        delay(500)
+                        delay(1000)
                         
                         // Use Insecure socket to avoid pairing/PIN issues
                         btSocket = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
-                        delay(500) // Give stack time to initialize
+                        delay(1000) // Give stack time to initialize
                         btSocket?.connect()
                         connected = true
-                    } catch (e: SecurityException) {
-                        Log.e("RNS_SERVICE", "Bluetooth Permission Denied", e)
-                        onStatusUpdate("Permission Denied: Bluetooth")
-                        throw e
+                        Log.i("RNS_SERVICE", "Bluetooth Socket Connected Successfully")
                     } catch (e: Exception) {
-                        Log.w("RNS_SERVICE", "Insecure UUID connection failed, trying reflection...")
-                        try {
-                            btSocket?.close()
-                            delay(500)
-                            val m = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
-                            btSocket = m.invoke(device, 1) as BluetoothSocket
-                            delay(500)
-                            btSocket?.connect()
-                            connected = true
-                        } catch (e2: SecurityException) {
-                            Log.e("RNS_SERVICE", "Bluetooth Permission Denied", e2)
-                            onStatusUpdate("Permission Denied: Bluetooth")
-                            throw e2
-                        } catch (e2: Exception) {
-                            Log.e("RNS_SERVICE", "Reflection connection failed too", e2)
-                            retryCount++
-                            if (retryCount < 2) {
-                                onStatusUpdate("Retrying BT in 2s...")
-                                delay(2000)
-                            }
+                        Log.e("RNS_SERVICE", "BT Connection Attempt ${retryCount + 1} Failed: ${e.message}")
+                        retryCount++
+                        if (retryCount < 3) {
+                            onStatusUpdate("Retrying BT in 3s...")
+                            delay(3000)
                         }
                     }
                 }

@@ -157,30 +157,47 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
         </div>
       </div>
 
-      {/* GLOBAL DIAGNOSTICS - MOVED TO TOP FOR ABSOLUTE VISIBILITY */}
-      <div className={`bg-black p-4 rounded-3xl border-4 shadow-2xl ring-4 ring-black/20 min-h-[120px] flex flex-col transition-colors duration-500 ${
-        status?.isConnected ? 'border-green-500' : 'border-red-500'
-      }`}>
+      {/* GLOBAL DIAGNOSTICS - FIXED POSITION FOR GUARANTEED VISIBILITY IN COMPILED APP */}
+      <div 
+        style={{ 
+          position: 'fixed', 
+          top: '10px', 
+          left: '10px', 
+          right: '10px', 
+          zIndex: 9999,
+          backgroundColor: '#000000',
+          minHeight: '100px',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '12px',
+          borderRadius: '20px',
+          border: `4px solid ${status?.isConnected ? '#22c55e' : '#ef4444'}`,
+          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)'
+        }}
+      >
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Activity className={`w-5 h-5 ${status?.isConnected ? 'text-green-400' : 'text-red-400'}`} />
-            <span className="text-[11px] font-black text-white uppercase tracking-widest">System Live Diagnostics</span>
+            <Activity className={`w-4 h-4 ${status?.isConnected ? 'text-green-400' : 'text-red-400'}`} />
+            <span className="text-[10px] font-black text-white uppercase tracking-widest">Live System Diagnostics</span>
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full animate-ping ${status?.isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span className="text-[10px] font-bold text-gray-400 uppercase">
+            <span className="text-[9px] font-bold text-gray-400 uppercase">
               {status?.isConnected ? 'Link Active' : 'Link Offline'}
             </span>
           </div>
         </div>
-        <div className="bg-gray-900/50 p-3 rounded-xl border border-gray-800 flex-1 overflow-y-auto">
-          <p className={`text-sm font-mono font-bold animate-pulse break-all leading-relaxed ${
+        <div className="bg-gray-900/80 p-2 rounded-lg border border-gray-800 flex-1 overflow-y-auto max-h-[80px]">
+          <p className={`text-[12px] font-mono font-bold animate-pulse break-all leading-tight ${
             status?.isConnected ? 'text-green-400' : 'text-red-400'
           }`}>
             {status?.statusMessage || (status?.isConnected ? "SYSTEM READY - WAITING FOR ACTION..." : "PLEASE CONNECT TO RNODE VIA BLUETOOTH")}
           </p>
         </div>
       </div>
+
+      {/* Spacer to prevent content from being hidden under the fixed box */}
+      <div className="h-[130px]" />
 
       {/* Connection Status */}
       <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
