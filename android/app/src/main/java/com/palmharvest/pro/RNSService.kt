@@ -1,5 +1,7 @@
 package com.palmharvest.pro
 
+import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
@@ -11,6 +13,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.*
+import kotlin.concurrent.thread
 
 data class RNSStatus(
     val isConnected: Boolean = false,
@@ -88,14 +91,13 @@ class RNSService(private val context: Context) {
     fun injectRNode(freq: Int, bw: Int, tx: Int, sf: Int, cr: Int) {
         // Save to prefs first
         val prefs = context.getSharedPreferences("rns_database", Context.MODE_PRIVATE)
-        prefs.edit().apply {
-            putInt("freq", freq)
-            putInt("bw", bw)
-            putInt("tx", tx)
-            putInt("sf", sf)
-            putInt("cr", cr)
-            apply()
-        }
+        val editor = prefs.edit()
+        editor.putInt("freq", freq)
+        editor.putInt("bw", bw)
+        editor.putInt("tx", tx)
+        editor.putInt("sf", sf)
+        editor.putInt("cr", cr)
+        editor.apply()
         
         // Trigger injection in service
         val intent = Intent(context, RNodeService::class.java)
