@@ -41,15 +41,35 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
   });
 
   const [status, setStatus] = useState<RNSStatus>(rnsService.getStatus());
+  const [devices, setDevices] = useState<{ name: string, address: string }[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<string>('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
 
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const pairedDevices = await rnsService.getDevices();
+        setDevices(pairedDevices);
+        if (pairedDevices.length > 0) {
+          setSelectedAddress(pairedDevices[0].address);
+        }
+      } catch (error) {
+        console.error('Failed to fetch devices:', error);
+      }
+    };
+    fetchDevices();
+  }, []);
+
   const handleConnect = async () => {
+    if (!selectedAddress) {
+      return toast.error('Please select an RNode device');
+    }
     setIsConnecting(true);
     try {
-      const newStatus = await rnsService.connect();
+      const newStatus = await rnsService.connectToAddress(selectedAddress);
       setStatus({ ...newStatus });
       toast.success('Connected to RNode via Bluetooth');
     } catch (error: any) {
@@ -124,26 +144,51 @@ export default function RNSPage({ records, onBack }: RNSPageProps) {
       {/* Connection Status */}
       <Card className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
         <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${status.isConnected ? 'bg-green-50' : 'bg-gray-50'}`}>
-                {status.isConnected ? <Bluetooth className="w-6 h-6 text-green-600" /> : <BluetoothOff className="w-6 h-6 text-gray-400" />}
+          <div className="flex flex-col gap-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${status.isConnected ? 'bg-green-50' : 'bg-gray-50'}`}>
+                  {status.isConnected ? <Bluetooth className="w-6 h-6 text-green-600" /> : <BluetoothOff className="w-6 h-6 text-gray-400" />}
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-900">RNode Connection</h3>
+                  <p className="text-xs font-medium text-gray-500">
+                    {status.isConnected ? `Connected to ${status.device}` : 'Select RNode device'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-black text-gray-900">RNode Connection</h3>
-                <p className="text-xs font-medium text-gray-500">
-                  {status.isConnected ? `Connected to ${status.device}` : 'No RNode connected'}
-                </p>
-              </div>
+              <Button 
+                onClick={status.isConnected ? handleDisconnect : handleConnect}
+                disabled={isConnecting}
+                variant={status.isConnected ? "outline" : "default"}
+                className={`rounded-xl font-bold ${status.isConnected ? 'border-red-100 text-red-600 hover:bg-red-50' : 'bg-primary-600'}`}
+              >
+                {isConnecting ? 'Connecting...' : status.isConnected ? 'Disconnect' : 'Connect BT'}
+              </Button>
             </div>
-            <Button 
-              onClick={status.isConnected ? handleDisconnect : handleConnect}
-              disabled={isConnecting}
-              variant={status.isConnected ? "outline" : "default"}
-              className={`rounded-xl font-bold ${status.isConnected ? 'border-red-100 text-red-600 hover:bg-red-50' : 'bg-primary-600'}`}
-            >
-              {isConnecting ? 'Connecting...' : status.isConnected ? 'Disconnect' : 'Connect BT'}
-            </Button>
+
+            {!status.isConnected && devices.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Paired Devices</Label>
+                <select 
+                  className="w-full h-12 rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm font-bold text-gray-700"
+                  value={selectedAddress}
+                  onChange={(e) => setSelectedAddress(e.target.value)}
+                >
+                  {devices.map(device => (
+                    <option key={device.address} value={device.address}>
+                      {device.name} ({device.address})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {!status.isConnected && devices.length === 0 && (
+              <p className="text-[10px] font-bold text-orange-500 bg-orange-50 p-3 rounded-xl border border-orange-100">
+                No paired Bluetooth devices found. Please pair your RNode in Android settings first.
+              </p>
+            )}
           </div>
 
           <AnimatePresence>

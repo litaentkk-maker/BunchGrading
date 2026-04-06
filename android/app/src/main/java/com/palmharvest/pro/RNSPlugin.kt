@@ -4,6 +4,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.getcapacitor.JSObject
@@ -53,6 +55,27 @@ class RNSPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getPairedDevices(call: PluginCall) {
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+        val adapter = bluetoothManager.adapter
+        
+        val devices = JSObject()
+        val deviceList = com.getcapacitor.JSArray()
+        
+        if (adapter != null && adapter.isEnabled) {
+            adapter.bondedDevices.forEach { device ->
+                val d = JSObject()
+                d.put("name", device.name ?: "Unknown")
+                d.put("address", device.address)
+                deviceList.put(d)
+            }
+        }
+        
+        devices.put("devices", deviceList)
+        call.resolve(devices)
+    }
+
+    @PluginMethod
     fun connectRNode(call: PluginCall) {
         val address = call.getString("address")
         if (address == null) {
@@ -60,22 +83,28 @@ class RNSPlugin : Plugin() {
             return
         }
 
-        thread {
-            try {
-                val device: BluetoothDevice = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address)
-                bluetoothSocket = device.createRfcommSocketToServiceRecord(MY_UUID)
-                bluetoothSocket?.connect()
-                
-                startBridge()
-                
-                activity.runOnUiThread {
-                    call.resolve()
-                }
-            } catch (e: Exception) {
-                activity.runOnUiThread {
-                    call.reject(e.message)
-                }
+        try {
+            val intent = Intent(context, RNodeService::class.java)
+            intent.putExtra("mac", address)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
             }
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject(e.message)
+        }
+    }
+
+    @PluginMethod
+    fun disconnectRNode(call: PluginCall) {
+        try {
+            val intent = Intent(context, RNodeService::class.java)
+            context.stopService(intent)
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject(e.message)
         }
     }
 
