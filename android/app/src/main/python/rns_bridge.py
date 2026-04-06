@@ -63,11 +63,15 @@ def log(msg):
 def start_rns(storage_path, callback_obj, nickname):
     global router, local_destination, kotlin_callback, is_rns_running
     kotlin_callback = callback_obj
+    log(f"start_rns() called with storage_path: {storage_path}")
+    
     if is_rns_running and local_destination is not None: 
+        log("RNS already running, returning existing hash")
         return RNS.hexrep(local_destination.hash, False)
     
     try:
         storage_path = str(storage_path)
+        log("Setting up directories...")
         os.environ["TMPDIR"] = os.path.join(storage_path, "cache")
         rns_dir = os.path.join(storage_path, ".reticulum")
         lxmf_dir = os.path.join(storage_path, ".lxmf")
@@ -75,24 +79,31 @@ def start_rns(storage_path, callback_obj, nickname):
         # Ensure all directories exist with proper permissions
         for d in [os.environ["TMPDIR"], rns_dir, lxmf_dir]:
             if not os.path.exists(d):
+                log(f"Creating directory: {d}")
                 os.makedirs(d, mode=0o755)
         
         # Create config if missing
         config_path = os.path.join(rns_dir, "config")
         if not os.path.exists(config_path):
+            log(f"Creating default config at: {config_path}")
             with open(config_path, "w") as f:
                 f.write("[reticulum]\nenable_transport = True\nshare_instance = Yes\n\n[interfaces]\n")
         
         # Initialize Reticulum
+        log("Initializing Reticulum stack (this may take a moment)...")
         RNS.Reticulum(configdir=rns_dir)
+        log("Reticulum stack initialized")
         
         # Load or create identity
         id_path = os.path.join(storage_path, "storage_identity")
+        log(f"Loading identity from: {id_path}")
         local_id = RNS.Identity.from_file(id_path) if os.path.exists(id_path) else RNS.Identity()
         if not os.path.exists(id_path):
+            log("Generating new identity...")
             local_id.to_file(id_path)
         
         # Setup router
+        log("Setting up LXMF router...")
         router = LXMRouter(identity=local_id, storagepath=lxmf_dir)
         local_destination = router.register_delivery_identity(local_id, display_name=nickname)
         router.register_delivery_callback(on_lxmf)
@@ -103,6 +114,8 @@ def start_rns(storage_path, callback_obj, nickname):
         return RNS.hexrep(local_destination.hash, False)
     except Exception as e:
         log(f"FATAL ERROR starting RNS: {e}")
+        import traceback
+        log(traceback.format_exc())
         is_rns_running = False
         return ""
 

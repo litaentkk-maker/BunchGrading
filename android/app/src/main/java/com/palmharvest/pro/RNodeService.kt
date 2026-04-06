@@ -32,7 +32,6 @@ class RNodeService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.i("RNS_SERVICE", "Service onCreate - Starting Foreground")
-        initializePythonEnvironment()
         createNotificationChannel()
         
         val notification = NotificationCompat.Builder(this, "RNS_CHANNEL")
@@ -55,6 +54,7 @@ class RNodeService : Service() {
         serviceScope.launch { 
             try {
                 Log.i("RNS_SERVICE", "Initializing RNS Stack in Python...")
+                onStatusUpdate("Initializing RNS Stack...")
                 val hash = Python.getInstance().getModule("rns_bridge").callAttr("start_rns", filesDir.absolutePath, this@RNodeService, "Harvester")?.toString()
                 rnsReady = true
                 Log.i("RNS_SERVICE", "RNS Ready, hash=$hash")
@@ -86,7 +86,7 @@ class RNodeService : Service() {
         serviceScope.launch(Dispatchers.IO) {
             try {
                 Log.i("RNS_SERVICE", "Connecting BT to $mac...")
-                onStatusUpdate("Connecting to Bluetooth...")
+                onStatusUpdate("Connecting to RNode...")
                 
                 // If we're already bridging to this MAC, don't close everything
                 if (mac == currentMac && isBridging && btSocket?.isConnected == true) {
@@ -328,19 +328,7 @@ class RNodeService : Service() {
     }
 
     private fun initializePythonEnvironment() {
-        try {
-            // Ensure Python is properly initialized
-            val pythonPath = filesDir.absolutePath + "/python"
-            val cachePath = cacheDir.absolutePath
-            
-            // Set required environment variables
-            System.setProperty("python.home", pythonPath)
-            System.setProperty("python.path", pythonPath)
-            
-            Log.d("RNS_SERVICE", "Python environment initialized: $pythonPath")
-        } catch (e: Exception) {
-            Log.e("RNS_SERVICE", "Failed to initialize Python environment", e)
-        }
+        // Removed: Let Chaquopy handle its own environment
     }
 
     companion object {
