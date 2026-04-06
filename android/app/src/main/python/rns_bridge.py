@@ -1,8 +1,12 @@
-import os, sys, time, base64, signal
+import os, sys, time, base64, signal, warnings
 from types import ModuleType
 import importlib.util, importlib.machinery
 
 # --- SIDEBAND/COLUMBA COMPATIBILITY MOCKS ---
+# Suppress noisy library warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=ResourceWarning)
+
 # Mock signal.signal because Reticulum tries to register handlers on a background thread
 _orig_signal = signal.signal
 def _mock_signal(sig, handler):

@@ -22,7 +22,7 @@ android {
             abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
         }
         python {
-            version "3.11"
+            version "3.12"
             pip {
                 install "rns==0.9.1"
                 install "lxmf==0.5.4"
