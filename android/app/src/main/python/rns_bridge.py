@@ -1,4 +1,5 @@
-import os, sys, time, base64, signal, warnings, json, platform
+import os, sys, time, base64, signal, warnings, json, platform, pty, threading
+import socket as sock_mod
 
 from types import ModuleType
 import importlib.util, importlib.machinery
@@ -45,11 +46,53 @@ importlib.util.find_spec = _mock_find_spec
 
 import RNS, LXMF
 from LXMF import LXMRouter, LXMessage
+from RNS.Interfaces.RNodeInterface import RNodeInterface
 from RNS.Interfaces.TCPInterface import TCPClientInterface
 from RNS.Interfaces.Interface import Interface
 
 active_ifac = None
 router = None; local_destination = None; kotlin_callback = None; is_rns_running = False
+_pty_thread = None
+_pty_master_fd = None
+
+def _pty_tcp_bridge(master_fd, tcp_host, tcp_port):
+    """Bridges a pty master fd to a TCP socket. Runs in a background thread."""
+    log(f"PTY-TCP bridge thread starting, connecting to {tcp_host}:{tcp_port}")
+    try:
+        s = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_STREAM)
+        s.connect((tcp_host, tcp_port))
+        log("PTY-TCP bridge: TCP connected")
+
+        def pty_to_tcp():
+            try:
+                while True:
+                    data = os.read(master_fd, 2048)
+                    if not data:
+                        break
+                    s.sendall(data)
+            except Exception as e:
+                log(f"PTY->TCP error: {e}")
+
+        def tcp_to_pty():
+            try:
+                while True:
+                    data = s.recv(2048)
+                    if not data:
+                        break
+                    os.write(master_fd, data)
+            except Exception as e:
+                log(f"TCP->PTY error: {e}")
+
+        t1 = threading.Thread(target=pty_to_tcp, daemon=True)
+        t2 = threading.Thread(target=tcp_to_pty, daemon=True)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+    except Exception as e:
+        log(f"PTY-TCP bridge failed: {e}")
+    finally:
+        try: s.close()
+        except: pass
+        log("PTY-TCP bridge thread exited")
 
 def log(msg):
     print(f"RNS-LOG: {msg}")
@@ -178,60 +221,79 @@ def inject_rnode_json(params_json):
         return str(e)
 
 def inject_rnode(freq, bw, tx, sf, cr):
-    global active_ifac
+    global active_ifac, _pty_thread, _pty_master_fd
+
     log(f"inject_rnode() CALLED - F:{freq} BW:{bw} SF:{sf} CR:{cr}")
-    
-    # Wait for RNS to be fully started
+
     waited = 0
     while not is_rns_running and waited < 45:
-        log(f"Waiting for RNS to start... ({waited}s)")
+        log(f"Waiting for RNS... ({waited}s)")
         time.sleep(1)
         waited += 1
-    
     if not is_rns_running:
-        log("FATAL: RNS never started, cannot inject interface")
+        log("FATAL: RNS never started")
         return "RNS_NOT_READY"
 
     try:
-        # Remove old interface if it exists
+        # Tear down old interface
         if active_ifac is not None:
             try:
-                log("Removing old interface...")
                 if active_ifac in RNS.Transport.interfaces:
                     RNS.Transport.interfaces.remove(active_ifac)
                 active_ifac.detach()
             except Exception as e:
                 log(f"Error removing old interface: {e}")
+            active_ifac = None
 
-        retries = 5
-        while retries > 0:
-            try:
-                log(f"Connecting TCPClientInterface to 127.0.0.1:7633 (attempt {6-retries})...")
-                ictx = {
-                    "name": "RNodeBridge",
-                    "type": "TCPClientInterface",
-                    "interface_enabled": True,
-                    "outgoing": True,
-                    "target_host": "127.0.0.1",
-                    "target_port": 7633,
-                }
-                active_ifac = TCPClientInterface(RNS.Transport, ictx)
-                active_ifac.IN = True
-                active_ifac.OUT = True
-                active_ifac.mode = Interface.MODE_FULL
+        # Close old pty if any
+        if _pty_master_fd is not None:
+            try: os.close(_pty_master_fd)
+            except: pass
+            _pty_master_fd = None
 
-                if active_ifac not in RNS.Transport.interfaces:
-                    RNS.Transport.interfaces.append(active_ifac)
+        # Create pty pair: master_fd <-> slave_fd
+        master_fd, slave_fd = pty.openpty()
+        slave_path = os.ttyname(slave_fd)
+        log(f"PTY created: slave={slave_path}")
+        _pty_master_fd = master_fd
 
-                log(f"TCPClientInterface connected. Online: {getattr(active_ifac, 'online', '?')}")
-                return "ONLINE"
-            except Exception as e:
-                retries -= 1
-                log(f"TCPClientInterface failed ({retries} left): {e}")
-                time.sleep(1.0)
+        # Start bridge thread: master_fd <-> TCP 127.0.0.1:7633
+        _pty_thread = threading.Thread(
+            target=_pty_tcp_bridge,
+            args=(master_fd, "127.0.0.1", 7633),
+            daemon=True
+        )
+        _pty_thread.start()
+        time.sleep(0.3)  # Let bridge thread connect
 
-        log("FATAL: Could not connect TCPClientInterface after 5 attempts")
-        return "OFFLINE"
+        # Now give the slave pty path to RNodeInterface as if it's a real serial port
+        # Temporarily hide Android env vars so RNodeInterface doesn't bail out
+        for var in ["ANDROID_ARGUMENT", "ANDROID_ROOT", "ANDROID_DATA"]:
+            os.environ.pop(var, None)
+
+        ictx = {
+            "name": "RNodeBridge",
+            "type": "RNodeInterface",
+            "interface_enabled": True,
+            "port": slave_path,          # e.g. /dev/pts/3
+            "frequency": int(freq),
+            "bandwidth": int(bw),
+            "txpower": int(tx),
+            "spreadingfactor": int(sf),
+            "codingrate": int(cr),
+            "flow_control": False,
+        }
+        log(f"Creating RNodeInterface on {slave_path}...")
+        active_ifac = RNodeInterface(RNS.Transport, ictx)
+        active_ifac.IN = True
+        active_ifac.OUT = True
+        active_ifac.mode = Interface.MODE_FULL
+
+        if active_ifac not in RNS.Transport.interfaces:
+            RNS.Transport.interfaces.append(active_ifac)
+
+        log(f"RNodeInterface online: {getattr(active_ifac, 'online', '?')}")
+        return "ONLINE"
 
     except Exception as e:
         log(f"Injection Error: {e}")
