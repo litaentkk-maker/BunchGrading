@@ -1,5 +1,4 @@
-import os, sys, time, base64, signal, warnings, json, platform, pty, threading
-import socket as sock_mod
+import os, sys, time, base64, signal, warnings, json, platform
 
 from types import ModuleType
 import importlib.util, importlib.machinery
@@ -52,47 +51,6 @@ from RNS.Interfaces.Interface import Interface
 
 active_ifac = None
 router = None; local_destination = None; kotlin_callback = None; is_rns_running = False
-_pty_thread = None
-_pty_master_fd = None
-
-def _pty_tcp_bridge(master_fd, tcp_host, tcp_port):
-    """Bridges a pty master fd to a TCP socket. Runs in a background thread."""
-    log(f"PTY-TCP bridge thread starting, connecting to {tcp_host}:{tcp_port}")
-    try:
-        s = sock_mod.socket(sock_mod.AF_INET, sock_mod.SOCK_STREAM)
-        s.connect((tcp_host, tcp_port))
-        log("PTY-TCP bridge: TCP connected")
-
-        def pty_to_tcp():
-            try:
-                while True:
-                    data = os.read(master_fd, 2048)
-                    if not data:
-                        break
-                    s.sendall(data)
-            except Exception as e:
-                log(f"PTY->TCP error: {e}")
-
-        def tcp_to_pty():
-            try:
-                while True:
-                    data = s.recv(2048)
-                    if not data:
-                        break
-                    os.write(master_fd, data)
-            except Exception as e:
-                log(f"TCP->PTY error: {e}")
-
-        t1 = threading.Thread(target=pty_to_tcp, daemon=True)
-        t2 = threading.Thread(target=tcp_to_pty, daemon=True)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
-    except Exception as e:
-        log(f"PTY-TCP bridge failed: {e}")
-    finally:
-        try: s.close()
-        except: pass
-        log("PTY-TCP bridge thread exited")
 
 def log(msg):
     print(f"RNS-LOG: {msg}")
@@ -221,23 +179,23 @@ def inject_rnode_json(params_json):
         return str(e)
 
 def inject_rnode(freq, bw, tx, sf, cr):
-    global active_ifac, _pty_thread, _pty_master_fd
-
+    global active_ifac
     log(f"inject_rnode() CALLED - F:{freq} BW:{bw} SF:{sf} CR:{cr}")
-
+    
     waited = 0
     while not is_rns_running and waited < 45:
-        log(f"Waiting for RNS... ({waited}s)")
+        log(f"Waiting for RNS to start... ({waited}s)")
         time.sleep(1)
         waited += 1
+    
     if not is_rns_running:
-        log("FATAL: RNS never started")
+        log("FATAL: RNS never started, cannot inject interface")
         return "RNS_NOT_READY"
 
     try:
-        # Tear down old interface
         if active_ifac is not None:
             try:
+                log("Removing old interface...")
                 if active_ifac in RNS.Transport.interfaces:
                     RNS.Transport.interfaces.remove(active_ifac)
                 active_ifac.detach()
@@ -245,58 +203,70 @@ def inject_rnode(freq, bw, tx, sf, cr):
                 log(f"Error removing old interface: {e}")
             active_ifac = None
 
-        # Close old pty if any
-        if _pty_master_fd is not None:
-            try: os.close(_pty_master_fd)
-            except: pass
-            _pty_master_fd = None
-
-        # Create pty pair: master_fd <-> slave_fd
-        master_fd, slave_fd = pty.openpty()
-        slave_path = os.ttyname(slave_fd)
-        log(f"PTY created: slave={slave_path}")
-        _pty_master_fd = master_fd
-
-        # Start bridge thread: master_fd <-> TCP 127.0.0.1:7633
-        _pty_thread = threading.Thread(
-            target=_pty_tcp_bridge,
-            args=(master_fd, "127.0.0.1", 7633),
-            daemon=True
-        )
-        _pty_thread.start()
-        time.sleep(0.3)  # Let bridge thread connect
-
-        # Now give the slave pty path to RNodeInterface as if it's a real serial port
-        # Temporarily hide Android env vars so RNodeInterface doesn't bail out
-        for var in ["ANDROID_ARGUMENT", "ANDROID_ROOT", "ANDROID_DATA"]:
-            os.environ.pop(var, None)
-
         ictx = {
-            "name": "RNodeBridge",
-            "type": "RNodeInterface",
-            "interface_enabled": True,
-            "port": slave_path,          # e.g. /dev/pts/3
-            "frequency": int(freq),
-            "bandwidth": int(bw),
-            "txpower": int(tx),
-            "spreadingfactor": int(sf),
-            "codingrate": int(cr),
-            "flow_control": False,
+            "name": "RNodeBridge", 
+            "type": "RNodeInterface", 
+            "interface_enabled": True, 
+            "port": "socket://127.0.0.1:7633",
+            "frequency": freq,
+            "bandwidth": bw,
+            "txpower": tx,
+            "spreadingfactor": sf,
+            "codingrate": cr,
+            "flow_control": False
         }
-        log(f"Creating RNodeInterface on {slave_path}...")
-        active_ifac = RNodeInterface(RNS.Transport, ictx)
-        active_ifac.IN = True
-        active_ifac.OUT = True
-        active_ifac.mode = Interface.MODE_FULL
+        log(f"Injecting RNode interface via socket://127.0.0.1:7633")
+        
+        retries = 5
+        while retries > 0:
+            try:
+                # --- PLATFORM MONKEYPATCH ---
+                _has_android_arg = "ANDROID_ARGUMENT" in os.environ
+                _old_android_arg = os.environ.get("ANDROID_ARGUMENT")
+                if _has_android_arg:
+                    del os.environ["ANDROID_ARGUMENT"]
+                    
+                _has_android_root = "ANDROID_ROOT" in os.environ
+                _old_android_root = os.environ.get("ANDROID_ROOT")
+                if _has_android_root:
+                    del os.environ["ANDROID_ROOT"]
 
-        if active_ifac not in RNS.Transport.interfaces:
-            RNS.Transport.interfaces.append(active_ifac)
+                # --- SERIAL MONKEYPATCH ---
+                import serial
+                _orig_serial = serial.Serial
+                def _patched_serial(*args, **kwargs):
+                    port = kwargs.get('port') or (args[0] if args else None)
+                    if port and str(port).startswith("socket://"):
+                        if 'port' in kwargs:
+                            del kwargs['port']
+                        new_args = args[1:] if args else ()
+                        return serial.serial_for_url(port, *new_args, **kwargs)
+                    return _orig_serial(*args, **kwargs)
+                serial.Serial = _patched_serial
 
-        log(f"RNodeInterface online: {getattr(active_ifac, 'online', '?')}")
+                try:
+                    active_ifac = RNodeInterface(RNS.Transport, ictx)
+                finally:
+                    serial.Serial = _orig_serial
+                    if _has_android_arg:
+                        os.environ["ANDROID_ARGUMENT"] = _old_android_arg
+                    if _has_android_root:
+                        os.environ["ANDROID_ROOT"] = _old_android_root
+                
+                log(f"Interface Injection Done. Status: {active_ifac}")
+                break
+            except Exception as e:
+                retries -= 1
+                log(f"Interface connection failed, retrying... ({retries} left): {e}")
+                time.sleep(1.0)
+        
+        if retries == 0:
+            log("FATAL: Failed to connect to local TCP bridge after 5 attempts")
+            return "OFFLINE"
+            
         return "ONLINE"
-
-    except Exception as e:
-        log(f"Injection Error: {e}")
+    except Exception as e: 
+        log(f"Injection Error: {str(e)}")
         import traceback
         log(traceback.format_exc())
         return str(e)
