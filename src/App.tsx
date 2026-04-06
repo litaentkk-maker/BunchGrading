@@ -1,6 +1,6 @@
 import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Toaster, toast } from 'sonner';
-import { HarvestRecord, UserProfile } from '@/src/types';
+import { HarvestRecord, UserProfile, RNSStatus } from '@/src/types';
 import { getRecordsLocal, saveRecordLocal, saveRecordsLocal } from '@/lib/storage';
 import Header from '@/src/components/Header';
 import LoginPage from '@/src/pages/LoginPage';
@@ -9,8 +9,9 @@ import EntryPage from '@/src/pages/EntryPage';
 import CalendarPage from '@/src/pages/CalendarPage';
 import SettingsPage from '@/src/pages/SettingsPage';
 import RNSPage from '@/src/pages/RNSPage';
-import { Calendar, Camera, LogOut, AlertTriangle, Settings, Zap } from 'lucide-react';
+import { Calendar, Camera, LogOut, AlertTriangle, Settings, Zap, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { rnsService } from '@/src/services/rnsService';
 import Papa from 'papaparse';
 
 // Error Boundary Component
@@ -62,13 +63,19 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [lastSync, setLastSync] = useState<string>(new Date().toLocaleTimeString());
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [rnsStatus, setRnsStatus] = useState<RNSStatus>(rnsService.getStatus());
 
   useEffect(() => {
-    // Network status listeners
+    // ... existing network status listeners ...
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // RNS Status Polling
+    const rnsInterval = setInterval(() => {
+      setRnsStatus({ ...rnsService.getStatus() });
+    }, 500);
 
     // Mock Auth Check
     const storedUser = localStorage.getItem('palm_harvest_user');
@@ -123,6 +130,7 @@ export default function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(rnsInterval);
     };
   }, []);
 
@@ -264,122 +272,158 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <ErrorBoundary>
-        <LoginPage 
-          onLogin={handleLogin} 
-          onRegister={handleRegister} 
-          onResetPassword={handleResetPassword} 
-        />
-        <Toaster position="top-center" richColors />
-      </ErrorBoundary>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex flex-col relative">
-        <Header 
-          user={user} 
-          onLogout={handleLogout} 
-          onSettings={() => setCurrentPage('settings')} 
-          isOnline={isOnline}
-          lastSync={lastSync}
-        />
-
-        <main className="flex-1 w-full overflow-x-hidden pb-32">
-          <div className="container mx-auto">
-            {currentPage === 'capture' && (
-              <CapturePage 
-                onCapture={handleCapture} 
-                onEdit={handleEdit}
-                onOpenRNS={() => setCurrentPage('rns')}
-                recentRecords={records.slice(0, 5)} 
-              />
-            )}
-
-            {currentPage === 'entry' && capturedPhotoData && (
-              <EntryPage 
-                photoData={capturedPhotoData} 
-                initialBunchCount={editingRecord?.bunchCount}
-                collectionPoint={nextCollectionPoint}
-                onSave={handleSaveHarvest} 
-                onCancel={() => {
-                  setCapturedPhotoData(null);
-                  setEditingRecord(null);
-                  setNextCollectionPoint('');
-                  setCurrentPage('capture');
-                }} 
-              />
-            )}
-
-            {currentPage === 'calendar' && (
-              <CalendarPage 
-                records={records} 
-                onExportCSV={handleExportCSV} 
-                onExportSheets={handleExportSheets} 
-                onEdit={handleEdit}
-              />
-            )}
-
-            {currentPage === 'settings' && (
-              <SettingsPage 
-                user={user} 
-                onBack={() => setCurrentPage('capture')} 
-                onExportCSV={handleExportCSV}
-                onExportSheets={handleExportSheets}
-                onOpenRNS={() => setCurrentPage('rns')}
-              />
-            )}
-
-            {currentPage === 'rns' && (
-              <RNSPage 
-                records={records} 
-                onBack={() => setCurrentPage('settings')} 
-              />
-            )}
+        {/* GLOBAL DIAGNOSTICS OVERLAY - MOVED TO APP ROOT FOR GUARANTEED VISIBILITY */}
+        <div 
+          style={{ 
+            position: 'fixed', 
+            top: '10px', 
+            left: '10px', 
+            right: '10px', 
+            zIndex: 9999,
+            backgroundColor: '#000000',
+            minHeight: '100px',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '12px',
+            borderRadius: '20px',
+            border: `4px solid ${rnsStatus?.isConnected ? '#22c55e' : '#ef4444'}`,
+            boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)'
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Activity className={`w-4 h-4 ${rnsStatus?.isConnected ? 'text-green-400' : 'text-red-400'}`} />
+              <span className="text-[10px] font-black text-white uppercase tracking-widest">Live System Diagnostics</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full animate-ping ${rnsStatus?.isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-[9px] font-bold text-gray-400 uppercase">
+                {rnsStatus?.isConnected ? 'Link Active' : 'Link Offline'}
+              </span>
+            </div>
           </div>
-        </main>
+          <div className="bg-gray-900/80 p-2 rounded-lg border border-gray-800 flex-1 overflow-y-auto max-h-[80px]">
+            <p className={`text-[12px] font-mono font-bold animate-pulse break-all leading-tight ${
+              rnsStatus?.isConnected ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {rnsStatus?.statusMessage || (rnsStatus?.isConnected ? "SYSTEM READY - WAITING FOR ACTION..." : "PLEASE CONNECT TO RNODE VIA BLUETOOTH")}
+            </p>
+          </div>
+        </div>
 
-        {/* Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-around z-50 shadow-[0_-4px_15px_rgba(0,0,0,0.08)]">
-          <Button 
-            variant="ghost" 
-            onClick={() => setCurrentPage('capture')}
-            className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'capture' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
-          >
-            <Camera className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Capture</span>
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            onClick={() => setCurrentPage('calendar')}
-            className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'calendar' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
-          >
-            <Calendar className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Calendar</span>
-          </Button>
+        {!user ? (
+          <LoginPage 
+            onLogin={handleLogin} 
+            onRegister={handleRegister} 
+            onResetPassword={handleResetPassword} 
+          />
+        ) : (
+          <>
+            <Header 
+              user={user} 
+              onLogout={handleLogout} 
+              onSettings={() => setCurrentPage('settings')} 
+              isOnline={isOnline}
+              lastSync={lastSync}
+            />
 
-          <Button 
-            variant="ghost" 
-            onClick={() => setCurrentPage('settings')}
-            className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'settings' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
-          >
-            <Settings className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Settings</span>
-          </Button>
-          
-          <Button 
-            variant="ghost" 
-            onClick={handleLogout}
-            className="flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl text-gray-400"
-          >
-            <LogOut className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Logout</span>
-          </Button>
-        </nav>
+            <main className="flex-1 w-full overflow-x-hidden pb-32">
+              <div className="container mx-auto">
+                {currentPage === 'capture' && (
+                  <CapturePage 
+                    onCapture={handleCapture} 
+                    onEdit={handleEdit}
+                    onOpenRNS={() => setCurrentPage('rns')}
+                    recentRecords={records.slice(0, 5)} 
+                  />
+                )}
+
+                {currentPage === 'entry' && capturedPhotoData && (
+                  <EntryPage 
+                    photoData={capturedPhotoData} 
+                    initialBunchCount={editingRecord?.bunchCount}
+                    collectionPoint={nextCollectionPoint}
+                    onSave={handleSaveHarvest} 
+                    onCancel={() => {
+                      setCapturedPhotoData(null);
+                      setEditingRecord(null);
+                      setNextCollectionPoint('');
+                      setCurrentPage('capture');
+                    }} 
+                  />
+                )}
+
+                {currentPage === 'calendar' && (
+                  <CalendarPage 
+                    records={records} 
+                    onExportCSV={handleExportCSV} 
+                    onExportSheets={handleExportSheets} 
+                    onEdit={handleEdit}
+                  />
+                )}
+
+                {currentPage === 'settings' && (
+                  <SettingsPage 
+                    user={user} 
+                    onBack={() => setCurrentPage('capture')} 
+                    onExportCSV={handleExportCSV}
+                    onExportSheets={handleExportSheets}
+                    onOpenRNS={() => setCurrentPage('rns')}
+                  />
+                )}
+
+                {currentPage === 'rns' && (
+                  <RNSPage 
+                    records={records} 
+                    onBack={() => setCurrentPage('settings')} 
+                  />
+                )}
+              </div>
+            </main>
+
+            {/* Bottom Navigation */}
+            <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-around z-50 shadow-[0_-4px_15px_rgba(0,0,0,0.08)]">
+              <Button 
+                variant="ghost" 
+                onClick={() => setCurrentPage('capture')}
+                className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'capture' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
+              >
+                <Camera className="w-6 h-6" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Capture</span>
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                onClick={() => setCurrentPage('calendar')}
+                className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'calendar' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
+              >
+                <Calendar className="w-6 h-6" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Calendar</span>
+              </Button>
+
+              <Button 
+                variant="ghost" 
+                onClick={() => setCurrentPage('settings')}
+                className={`flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl transition-all ${currentPage === 'settings' ? 'text-primary-600 bg-primary-50' : 'text-gray-400'}`}
+              >
+                <Settings className="w-6 h-6" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Settings</span>
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                onClick={handleLogout}
+                className="flex flex-col items-center gap-1 h-auto py-1 px-4 rounded-xl text-gray-400"
+              >
+                <LogOut className="w-6 h-6" />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Logout</span>
+              </Button>
+            </nav>
+          </>
+        )}
 
         <Toaster position="top-center" richColors />
       </div>

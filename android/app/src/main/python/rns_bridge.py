@@ -45,6 +45,7 @@ importlib.util.find_spec = _mock_find_spec
 import RNS, LXMF
 from LXMF import LXMRouter, LXMessage
 from RNS.Interfaces.RNodeInterface import RNodeInterface
+from RNS.Interfaces.TCPInterface import TCPClientInterface
 from RNS.Interfaces.Interface import Interface
 
 active_ifac = None
@@ -153,41 +154,39 @@ def inject_rnode(freq, bw, tx, sf, cr):
             except Exception as e:
                 log(f"Error removing old interface: {e}")
 
-        # Use the standard RNodeInterface and point it to our local TCP bridge
-        # We provide both 'port' and 'tcp_host/port' for maximum compatibility across RNS versions
+        # Use the standard TCPClientInterface to connect to our local bridge
         ictx = {
             "name": "Bridge", 
-            "type": "RNodeInterface", 
+            "type": "TCPClientInterface", 
             "interface_enabled": True, 
             "outgoing": True,
-            "port": "tcp://127.0.0.1:7633",
-            "tcp_host": "127.0.0.1",
-            "tcp_port": 7633,
-            "frequency": int(freq), 
-            "bandwidth": int(bw),
-            "txpower": int(tx), 
-            "spreadingfactor": int(sf), 
-            "codingrate": int(cr), 
-            "flow_control": False
+            "target_host": "127.0.0.1",
+            "target_port": 7633
         }
-        log(f"Injecting RNode interface via TCP:127.0.0.1:7633")
+        log(f"Injecting TCP interface via 127.0.0.1:7633")
         
-        # We use a small delay to ensure the Kotlin TCP server is ready
-        time.sleep(0.5)
+        # We use a retry loop to ensure the Kotlin TCP server is ready
+        retries = 5
+        while retries > 0:
+            try:
+                active_ifac = TCPClientInterface(RNS.Transport, ictx)
+                active_ifac.mode = Interface.MODE_FULL
+                active_ifac.IN = True; active_ifac.OUT = True
+                
+                # Manually add to transport if not already there
+                if active_ifac not in RNS.Transport.interfaces:
+                    RNS.Transport.interfaces.append(active_ifac)
+                
+                log(f"Interface Injection Done. Status: {active_ifac}")
+                break
+            except Exception as e:
+                retries -= 1
+                log(f"Interface connection failed, retrying... ({retries} left): {e}")
+                time.sleep(1.0)
         
-        active_ifac = RNodeInterface(RNS.Transport, ictx)
-        active_ifac.mode = Interface.MODE_FULL
-        active_ifac.IN = True; active_ifac.OUT = True
-        
-        # Manually add to transport if not already there
-        if active_ifac not in RNS.Transport.interfaces:
-            RNS.Transport.interfaces.append(active_ifac)
-            
-        log(f"Interface Injection Done. Status: {active_ifac}")
-        
-        # Check if it's actually connected
-        if hasattr(active_ifac, "online") and not active_ifac.online:
-            log("Warning: Interface is offline. Checking bridge...")
+        if retries == 0:
+            log("FATAL: Failed to connect to local TCP bridge after 5 attempts")
+            return "OFFLINE"
             
         return "ONLINE"
     except Exception as e: 
@@ -195,6 +194,10 @@ def inject_rnode(freq, bw, tx, sf, cr):
         import traceback
         log(traceback.format_exc())
         return str(e)
+
+def heartbeat():
+    """Simple heartbeat to verify Python is still responsive"""
+    return int(time.time())
 
 def send_text(dest_hex, text):
     try:

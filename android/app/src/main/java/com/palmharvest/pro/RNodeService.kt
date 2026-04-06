@@ -139,21 +139,12 @@ class RNodeService : Service() {
                 }
 
                 onStatusUpdate("BT Connected. Starting TCP...")
-                tcpServer = ServerSocket()
-                tcpServer?.reuseAddress = true
-                tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
-                
                 isBridging = true
                 currentMac = mac
                 getSharedPreferences("rns_database", Context.MODE_PRIVATE).edit().putString("last_mac", mac).apply()
                 
-                Log.i("RNS_SERVICE", "Bridge 7633 Ready for $mac")
-                onStatusUpdate("Bridge Ready (7633)")
-
+                Log.i("RNS_SERVICE", "Bridge Ready for $mac")
                 launch { handleTcpClients() }
-                delay(1000)
-                onStatusUpdate("Injecting RNode to Python...")
-                injectPython()
 
             } catch (e: Exception) { 
                 currentMac = "" 
@@ -166,64 +157,86 @@ class RNodeService : Service() {
 
     private suspend fun handleTcpClients() {
         withContext(Dispatchers.IO) {
-            while (isBridging && isActive) {
-                try {
-                    Log.i("RNS_SERVICE", "TCP Server: Waiting for Python client on port 7633...")
-                    val client = tcpServer?.accept() ?: break
-                    client.tcpNoDelay = true
-                    Log.i("RNS_SERVICE", "TCP Server: Python client connected from ${client.inetAddress}")
-                    onStatusUpdate("RNode Bridge Connected")
+            try {
+                tcpServer = ServerSocket()
+                tcpServer?.reuseAddress = true
+                tcpServer?.bind(InetSocketAddress("127.0.0.1", 7633))
+                Log.i("RNS_BRIDGE", "TCP Bridge Server listening on 127.0.0.1:7633")
+                
+                while (isBridging && isActive) {
+                    try {
+                        Log.i("RNS_SERVICE", "TCP Server: Waiting for Python client on port 7633...")
+                        val client = tcpServer?.accept() ?: break
+                        client.tcpNoDelay = true
+                        Log.i("RNS_SERVICE", "TCP Server: Python client connected from ${client.inetAddress}")
+                        onStatusUpdate("RNode Bridge Connected")
+                        
+                        // Inject RNode to Python AFTER TCP client has connected
+                        onStatusUpdate("Injecting RNode to Python...")
+                        injectPython()
 
-                    val btIn = btSocket!!.inputStream
-                    val btOut = btSocket!!.outputStream
-                    val tcpIn = client.inputStream
-                    val tcpOut = client.outputStream
+                        val btIn = btSocket!!.inputStream
+                        val btOut = btSocket!!.outputStream
+                        val tcpIn = client.inputStream
+                        val tcpOut = client.outputStream
 
-                    launch {
-                        try {
-                            val buf = ByteArray(2048)
-                            var r = 0
-                            while (isBridging && isActive) {
-                                r = btIn.read(buf)
-                                if (r == -1) break
-                                if (r > 0) { 
-                                    Log.v("RNS_BRIDGE", "BT -> TCP: $r bytes")
-                                    tcpOut.write(buf, 0, r)
-                                    tcpOut.flush() 
+                        coroutineScope {
+                            launch {
+                                try {
+                                    val buf = ByteArray(2048)
+                                    var r = 0
+                                    while (isBridging && isActive) {
+                                        r = btIn.read(buf)
+                                        if (r == -1) break
+                                        if (r > 0) { 
+                                            Log.v("RNS_BRIDGE", "BT -> TCP: $r bytes")
+                                            tcpOut.write(buf, 0, r)
+                                            tcpOut.flush() 
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("RNS_SERVICE", "BT Read Error", e)
+                                } finally {
+                                    Log.w("RNS_SERVICE", "BT Link Lost - Resetting Bridge")
+                                    isBridging = false
+                                    currentMac = ""
+                                    onStatusUpdate("Connection Lost")
+                                    try { client.close() } catch (e: Exception) { }
+                                    try { btSocket?.close() } catch (e: Exception) { }
+                                    try { tcpServer?.close() } catch (e: Exception) { }
                                 }
                             }
-                        } catch (e: Exception) {
-                            Log.e("RNS_SERVICE", "BT Read Error", e)
-                        } finally {
-                            Log.w("RNS_SERVICE", "BT Link Lost - Resetting Bridge")
-                            isBridging = false
-                            currentMac = ""
-                            onStatusUpdate("Connection Lost")
-                            try { client.close() } catch (e: Exception) { }
-                            try { btSocket?.close() } catch (e: Exception) { }
-                        }
-                    }
 
-                    launch {
-                        try {
-                            val buf = ByteArray(2048)
-                            var r = 0
-                            while (isBridging && isActive) {
-                                r = tcpIn.read(buf)
-                                if (r == -1) break
-                                if (r > 0) { 
-                                    Log.v("RNS_BRIDGE", "TCP -> BT: $r bytes")
-                                    btOut.write(buf, 0, r)
-                                    btOut.flush() 
+                            launch {
+                                try {
+                                    val buf = ByteArray(2048)
+                                    var r = 0
+                                    while (isBridging && isActive) {
+                                        r = tcpIn.read(buf)
+                                        if (r == -1) break
+                                        if (r > 0) { 
+                                            Log.v("RNS_BRIDGE", "TCP -> BT: $r bytes")
+                                            btOut.write(buf, 0, r)
+                                            btOut.flush() 
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("RNS_SERVICE", "TCP Read Error", e)
+                                } finally {
+                                    try { client.close() } catch (e: Exception) { }
                                 }
                             }
-                        } catch (e: Exception) {
-                            Log.e("RNS_SERVICE", "TCP Read Error", e)
-                        } finally {
-                            try { client.close() } catch (e: Exception) { }
                         }
+                    } catch (e: Exception) { 
+                        Log.e("RNS_SERVICE", "TCP Accept Error", e)
+                        break 
                     }
-                } catch (e: Exception) { break }
+                }
+            } catch (e: Exception) {
+                Log.e("RNS_SERVICE", "TCP Server Error", e)
+            } finally {
+                try { tcpServer?.close() } catch (e: Exception) { }
+                tcpServer = null
             }
         }
     }
