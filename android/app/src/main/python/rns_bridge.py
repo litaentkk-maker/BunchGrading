@@ -7,7 +7,10 @@ import os, sys, time, base64, signal, warnings, json, platform
 # works perfectly with the standard RNodeInterface. We bypass this check
 # by making Reticulum think it's running on Linux.
 platform.system = lambda: "Linux"
+platform.release = lambda: "generic"
 sys.platform = "linux"
+if hasattr(sys, "getandroidapilevel"):
+    del sys.getandroidapilevel
 
 from types import ModuleType
 import importlib.util, importlib.machinery
@@ -78,15 +81,20 @@ try:
         # Temporarily force platform to Linux during init to bypass the check
         import platform as p
         _old_sys = p.system
+        _old_rel = p.release
         p.system = lambda: "Linux"
+        p.release = lambda: "generic"
         
         # Also patch RNS.vendor.platform if it exists
         _old_vendor_sys = None
+        _old_vendor_rel = None
         try:
             import RNS
             if hasattr(RNS, "vendor") and hasattr(RNS.vendor, "platform"):
                 _old_vendor_sys = RNS.vendor.platform.system
+                _old_vendor_rel = RNS.vendor.platform.release
                 RNS.vendor.platform.system = lambda: "Linux"
+                RNS.vendor.platform.release = lambda: "generic"
         except:
             pass
 
@@ -94,9 +102,11 @@ try:
             _orig_rnode_init(self, owner, configuration)
         finally:
             p.system = _old_sys
+            p.release = _old_rel
             if _old_vendor_sys:
                 try:
                     RNS.vendor.platform.system = _old_vendor_sys
+                    RNS.vendor.platform.release = _old_vendor_rel
                 except:
                     pass
     RNodeInterface.__init__ = _patched_rnode_init
