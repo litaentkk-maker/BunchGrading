@@ -93,14 +93,20 @@ class RNodeService : Service() {
                 val adapter = bluetoothManager.adapter
                 val device = adapter.getRemoteDevice(mac)
                 
-                // Try UUID first, then reflection as fallback
+                // Try Insecure UUID first (best for RNodes), then reflection as fallback
                 var connected = false
                 var retryCount = 0
                 while (!connected && retryCount < 2) {
                     try {
                         Log.i("RNS_SERVICE", "Connection attempt ${retryCount + 1}")
                         onStatusUpdate("BT Attempt ${retryCount + 1}...")
-                        btSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+                        
+                        btSocket?.close()
+                        delay(500)
+                        
+                        // Use Insecure socket to avoid pairing/PIN issues
+                        btSocket = device.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
+                        delay(500) // Give stack time to initialize
                         btSocket?.connect()
                         connected = true
                     } catch (e: SecurityException) {
@@ -108,10 +114,13 @@ class RNodeService : Service() {
                         onStatusUpdate("Permission Denied: Bluetooth")
                         throw e
                     } catch (e: Exception) {
-                        Log.w("RNS_SERVICE", "UUID connection failed, trying reflection...")
+                        Log.w("RNS_SERVICE", "Insecure UUID connection failed, trying reflection...")
                         try {
+                            btSocket?.close()
+                            delay(500)
                             val m = device.javaClass.getMethod("createInsecureRfcommSocket", Int::class.javaPrimitiveType)
                             btSocket = m.invoke(device, 1) as BluetoothSocket
+                            delay(500)
                             btSocket?.connect()
                             connected = true
                         } catch (e2: SecurityException) {
@@ -181,6 +190,7 @@ class RNodeService : Service() {
                                 r = btIn.read(buf)
                                 if (r == -1) break
                                 if (r > 0) { 
+                                    Log.v("RNS_BRIDGE", "BT -> TCP: $r bytes")
                                     tcpOut.write(buf, 0, r)
                                     tcpOut.flush() 
                                 }
@@ -205,6 +215,7 @@ class RNodeService : Service() {
                                 r = tcpIn.read(buf)
                                 if (r == -1) break
                                 if (r > 0) { 
+                                    Log.v("RNS_BRIDGE", "TCP -> BT: $r bytes")
                                     btOut.write(buf, 0, r)
                                     btOut.flush() 
                                 }

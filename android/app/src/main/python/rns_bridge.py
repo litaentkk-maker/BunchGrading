@@ -165,14 +165,17 @@ def inject_rnode(freq, bw, tx, sf, cr):
             "codingrate": int(cr), 
             "flow_control": False
         }
+        log(f"Injecting interface with config: {ictx}")
         active_ifac = RNodeInterface(RNS.Transport, ictx)
         active_ifac.mode = Interface.MODE_FULL
         active_ifac.IN = True; active_ifac.OUT = True
         RNS.Transport.interfaces.append(active_ifac)
-        log("Interface Injection Done.")
+        log(f"Interface Injection Done. Interface status: {active_ifac}")
         return "ONLINE"
     except Exception as e: 
         log(f"Injection Error: {str(e)}")
+        import traceback
+        log(traceback.format_exc())
         return str(e)
 
 def send_text(dest_hex, text):
