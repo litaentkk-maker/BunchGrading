@@ -9,8 +9,6 @@ import os, sys, time, base64, signal, warnings, json, platform
 platform.system = lambda: "Linux"
 platform.release = lambda: "generic"
 sys.platform = "linux"
-if hasattr(sys, "getandroidapilevel"):
-    del sys.getandroidapilevel
 
 from types import ModuleType
 import importlib.util, importlib.machinery
@@ -80,10 +78,17 @@ try:
     def _patched_rnode_init(self, owner, configuration):
         # Temporarily force platform to Linux during init to bypass the check
         import platform as p
+        import sys
         _old_sys = p.system
         _old_rel = p.release
         p.system = lambda: "Linux"
         p.release = lambda: "generic"
+        
+        # Temporarily hide sys.getandroidapilevel
+        _has_android_api = hasattr(sys, "getandroidapilevel")
+        _old_getandroidapilevel = getattr(sys, "getandroidapilevel", None)
+        if _has_android_api:
+            del sys.getandroidapilevel
         
         # Also patch RNS.vendor.platform if it exists
         _old_vendor_sys = None
@@ -103,6 +108,9 @@ try:
         finally:
             p.system = _old_sys
             p.release = _old_rel
+            if _has_android_api and _old_getandroidapilevel:
+                sys.getandroidapilevel = _old_getandroidapilevel
+                
             if _old_vendor_sys:
                 try:
                     RNS.vendor.platform.system = _old_vendor_sys
@@ -130,6 +138,13 @@ def start_rns(storage_path, callback_obj, nickname):
     log(f"start_rns() called with storage_path: {storage_path}")
     log(f"DIAGNOSTIC: platform.system()={platform.system()}, sys.platform={sys.platform}")
     
+    try:
+        import inspect
+        source = inspect.getsource(_orig_rnode_init)
+        log(f"RNodeInterface.__init__ source:\n{source}")
+    except Exception as e:
+        log(f"Failed to get RNodeInterface source: {e}")
+        
     if is_rns_running and local_destination is not None: 
         log("RNS already running, returning existing hash")
         return RNS.hexrep(local_destination.hash, False)
