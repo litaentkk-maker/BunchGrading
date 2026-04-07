@@ -200,6 +200,21 @@ export default function App() {
     setCurrentPage('entry');
   };
 
+  const handleDeleteRecord = (recordId: string) => {
+    const updatedRecords = records.filter(r => r.id !== recordId);
+    setRecords(updatedRecords);
+    saveRecordsLocal(updatedRecords);
+    toast.success("Record deleted successfully");
+  };
+
+  const handleClearAllData = () => {
+    if (window.confirm("Are you sure you want to clear all harvest records? This action cannot be undone.")) {
+      setRecords([]);
+      saveRecordsLocal([]);
+      toast.success("All records cleared");
+    }
+  };
+
   const handleSaveHarvest = async (bunchCount: number) => {
     if (!capturedPhotoData || !user) return;
 
@@ -336,6 +351,7 @@ export default function App() {
                   <CapturePage 
                     onCapture={handleCapture} 
                     onEdit={handleEdit}
+                    onDelete={handleDeleteRecord}
                     onOpenRNS={() => setCurrentPage('rns')}
                     recentRecords={records.slice(0, 5)} 
                   />
@@ -362,6 +378,7 @@ export default function App() {
                     onExportCSV={handleExportCSV} 
                     onExportSheets={handleExportSheets} 
                     onEdit={handleEdit}
+                    onDelete={handleDeleteRecord}
                   />
                 )}
 
@@ -372,6 +389,7 @@ export default function App() {
                     onExportCSV={handleExportCSV}
                     onExportSheets={handleExportSheets}
                     onOpenRNS={() => setCurrentPage('rns')}
+                    onClearData={handleClearAllData}
                   />
                 )}
 

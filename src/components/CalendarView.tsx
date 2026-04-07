@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Calendar from 'react-calendar';
-import { format, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, isSameDay, startOfMonth, endOfMonth, endOfDay } from 'date-fns';
 import { HarvestRecord } from '@/src/types';
 import ActivityList from './ActivityList';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,9 +13,10 @@ interface CalendarViewProps {
   onExportCSV: () => void;
   onExportSheets: () => void;
   onEdit?: (record: HarvestRecord) => void;
+  onDelete?: (recordId: string) => void;
 }
 
-export default function CalendarView({ records, onExportCSV, onExportSheets, onEdit }: CalendarViewProps) {
+export default function CalendarView({ records, onExportCSV, onExportSheets, onEdit, onDelete }: CalendarViewProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const filteredRecords = records.filter(record => 
@@ -23,13 +24,14 @@ export default function CalendarView({ records, onExportCSV, onExportSheets, onE
   );
 
   const totalToday = filteredRecords.reduce((sum, record) => sum + record.bunchCount, 0);
+  const entriesToday = filteredRecords.length;
   
   const monthStart = startOfMonth(selectedDate);
-  const monthEnd = endOfMonth(selectedDate);
+  const dayEnd = endOfDay(selectedDate);
   const totalToDate = records
     .filter(record => {
       const date = new Date(record.timestamp);
-      return date >= monthStart && date <= monthEnd;
+      return date >= monthStart && date <= dayEnd;
     })
     .reduce((sum, record) => sum + record.bunchCount, 0);
 
@@ -51,12 +53,12 @@ export default function CalendarView({ records, onExportCSV, onExportSheets, onE
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-primary-600 text-white border-none shadow-lg rounded-2xl overflow-hidden relative">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-2 opacity-80">
               <TrendingUp className="w-4 h-4" />
-              <p className="text-[10px] font-bold uppercase tracking-wider">Harvested Today</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider">Total Bunches Today</p>
             </div>
             <h3 className="text-3xl font-black">{totalToday}</h3>
             <p className="text-[10px] mt-1 opacity-70">{format(selectedDate, 'MMMM d, yyyy')}</p>
@@ -65,15 +67,26 @@ export default function CalendarView({ records, onExportCSV, onExportSheets, onE
             <TrendingUp className="w-24 h-24" />
           </div>
         </Card>
+
+        <Card className="bg-white border-none shadow-lg rounded-2xl overflow-hidden relative">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2 text-primary-600 opacity-80">
+              <TrendingUp className="w-4 h-4" />
+              <p className="text-[10px] font-bold uppercase tracking-wider">Total Entries Today</p>
+            </div>
+            <h3 className="text-3xl font-black text-gray-900">{entriesToday}</h3>
+            <p className="text-[10px] mt-1 text-gray-400">Records for {format(selectedDate, 'MMM d')}</p>
+          </CardContent>
+        </Card>
         
         <Card className="bg-white border-none shadow-lg rounded-2xl overflow-hidden relative">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-2 text-primary-600 opacity-80">
               <CalendarIcon className="w-4 h-4" />
-              <p className="text-[10px] font-bold uppercase tracking-wider">Total to Date</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider">Total Bunches to Date</p>
             </div>
             <h3 className="text-3xl font-black text-gray-900">{totalToDate}</h3>
-            <p className="text-[10px] mt-1 text-gray-400">{format(selectedDate, 'MMMM yyyy')}</p>
+            <p className="text-[10px] mt-1 text-gray-400">Month of {format(selectedDate, 'MMMM yyyy')}</p>
           </CardContent>
           <div className="absolute -right-4 -bottom-4 opacity-5 text-primary-600">
             <CalendarIcon className="w-24 h-24" />
@@ -110,6 +123,7 @@ export default function CalendarView({ records, onExportCSV, onExportSheets, onE
           records={filteredRecords} 
           title={`Entries for ${format(selectedDate, 'MMM d')}`} 
           onEdit={onEdit}
+          onDelete={onDelete}
         />
       </div>
     </div>

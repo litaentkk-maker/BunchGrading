@@ -6,9 +6,10 @@ interface CalendarPageProps {
   onExportCSV: () => void;
   onExportSheets: () => void;
   onEdit: (record: HarvestRecord) => void;
+  onDelete: (recordId: string) => void;
 }
 
-export default function CalendarPage({ records, onExportCSV, onExportSheets, onEdit }: CalendarPageProps) {
+export default function CalendarPage({ records, onExportCSV, onExportSheets, onEdit, onDelete }: CalendarPageProps) {
   return (
     <div className="p-4 space-y-8 max-w-2xl mx-auto pb-24">
       <div className="text-center space-y-2">
@@ -21,6 +22,7 @@ export default function CalendarPage({ records, onExportCSV, onExportSheets, onE
         onExportCSV={onExportCSV} 
         onExportSheets={onExportSheets} 
         onEdit={onEdit}
+        onDelete={onDelete}
       />
     </div>
   );

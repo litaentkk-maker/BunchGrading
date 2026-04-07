@@ -10,9 +10,10 @@ interface SettingsPageProps {
   onExportCSV: () => void;
   onExportSheets: () => void;
   onOpenRNS: () => void;
+  onClearData: () => void;
 }
 
-export default function SettingsPage({ user, onBack, onExportCSV, onExportSheets, onOpenRNS }: SettingsPageProps) {
+export default function SettingsPage({ user, onBack, onExportCSV, onExportSheets, onOpenRNS, onClearData }: SettingsPageProps) {
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto pb-24">
       <div className="flex items-center gap-4 mb-2">
@@ -120,7 +121,11 @@ export default function SettingsPage({ user, onBack, onExportCSV, onExportSheets
           </div>
           
           <div className="pt-2">
-            <Button variant="ghost" className="w-full justify-start text-red-600 font-bold text-xs hover:bg-red-50 rounded-xl px-0">
+            <Button 
+              variant="ghost" 
+              onClick={onClearData}
+              className="w-full justify-start text-red-600 font-bold text-xs hover:bg-red-50 rounded-xl px-0"
+            >
               Clear Local Cache
             </Button>
           </div>

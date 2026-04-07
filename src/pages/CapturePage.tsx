@@ -5,11 +5,12 @@ import { HarvestRecord } from '@/src/types';
 interface CapturePageProps {
   onCapture: (photoUrl: string, location?: { latitude: number; longitude: number }) => void;
   onEdit: (record: HarvestRecord) => void;
+  onDelete: (recordId: string) => void;
   onOpenRNS: () => void;
   recentRecords: HarvestRecord[];
 }
 
-export default function CapturePage({ onCapture, onEdit, onOpenRNS, recentRecords }: CapturePageProps) {
+export default function CapturePage({ onCapture, onEdit, onDelete, onOpenRNS, recentRecords }: CapturePageProps) {
   return (
     <div className="p-4 space-y-8 max-w-2xl mx-auto pb-20">
       <div className="flex items-center justify-between">
@@ -28,7 +29,7 @@ export default function CapturePage({ onCapture, onEdit, onOpenRNS, recentRecord
       <PhotoCapture onCapture={onCapture} />
 
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-        <ActivityList records={recentRecords} title="Today's Harvests" onEdit={onEdit} />
+        <ActivityList records={recentRecords} title="Today's Harvests" onEdit={onEdit} onDelete={onDelete} />
       </div>
     </div>
   );
