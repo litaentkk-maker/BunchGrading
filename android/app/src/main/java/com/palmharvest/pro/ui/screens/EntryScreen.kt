@@ -26,10 +26,14 @@ import com.palmharvest.pro.ui.theme.*
 fun EntryScreen(
     photo: android.graphics.Bitmap? = null,
     initialBunchCount: Int = 1,
-    onSave: (Int) -> Unit = {},
+    initialBlockId: String = "",
+    latitude: Double? = null,
+    longitude: Double? = null,
+    onSave: (Int, String) -> Unit = { _, _ -> },
     onCancel: () -> Unit = {}
 ) {
     var bunchCount by remember(initialBunchCount) { mutableStateOf(initialBunchCount) }
+    var blockId by remember(initialBlockId) { mutableStateOf(initialBlockId) }
     var isSaving by remember { mutableStateOf(false) }
 
     Column(
@@ -99,7 +103,9 @@ fun EntryScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.LocationOn, contentDescription = null, tint = Primary100, modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Lat: 3.1415, Lng: 101.6869", style = MaterialTheme.typography.labelMedium, color = Primary100)
+                                val latStr = latitude?.let { String.format("%.4f", it) } ?: "---"
+                                val lngStr = longitude?.let { String.format("%.4f", it) } ?: "---"
+                                Text("Lat: $latStr, Lng: $lngStr", style = MaterialTheme.typography.labelMedium, color = Primary100)
                             }
                         }
                     }
@@ -223,10 +229,31 @@ fun EntryScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider(color = Gray100)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Block ID (Harvest Location)", style = MaterialTheme.typography.labelMedium, color = Gray400)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = blockId,
+                        onValueChange = { blockId = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        placeholder = { Text("e.g. BLK-A1", color = Gray300) },
+                        leadingIcon = { Icon(Icons.Default.Map, contentDescription = null, tint = Gray400) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Primary600,
+                            unfocusedBorderColor = Gray200
+                        )
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(32.dp))
 
                 Button(
-                    onClick = { onSave(bunchCount) },
+                    onClick = { onSave(bunchCount, blockId) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp),

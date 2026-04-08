@@ -9,6 +9,7 @@ data class HarvestRecord(
     val id: String,
     val harvesterUid: String,
     val harvesterName: String,
+    val blockId: String,
     val collectionPoint: String,
     val bunchCount: Int,
     val photoUrl: String,
@@ -19,6 +20,14 @@ data class HarvestRecord(
 
 class StorageManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("palm_harvest_prefs", Context.MODE_PRIVATE)
+
+    fun getLastBlockId(): String {
+        return prefs.getString("last_block_id", "") ?: ""
+    }
+
+    fun setLastBlockId(blockId: String) {
+        prefs.edit().putString("last_block_id", blockId).apply()
+    }
 
     fun saveRecord(record: HarvestRecord) {
         val records = getRecords().toMutableList()
@@ -43,6 +52,7 @@ class StorageManager(context: Context) {
                         id = obj.getString("id"),
                         harvesterUid = obj.getString("harvesterUid"),
                         harvesterName = obj.getString("harvesterName"),
+                        blockId = if (obj.has("blockId")) obj.getString("blockId") else "",
                         collectionPoint = obj.getString("collectionPoint"),
                         bunchCount = obj.getInt("bunchCount"),
                         photoUrl = obj.getString("photoUrl"),
@@ -65,6 +75,7 @@ class StorageManager(context: Context) {
                 put("id", record.id)
                 put("harvesterUid", record.harvesterUid)
                 put("harvesterName", record.harvesterName)
+                put("blockId", record.blockId)
                 put("collectionPoint", record.collectionPoint)
                 put("bunchCount", record.bunchCount)
                 put("photoUrl", record.photoUrl)

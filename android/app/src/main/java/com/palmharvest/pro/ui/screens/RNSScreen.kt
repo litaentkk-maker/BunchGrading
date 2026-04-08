@@ -47,6 +47,7 @@ fun RNSScreen(
     var txPower by remember { mutableStateOf("17") }
     var spreadingFactor by remember { mutableStateOf("8") }
     var codingRate by remember { mutableStateOf("6") }
+    var destinationHash by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -386,8 +387,8 @@ fun RNSScreen(
                     Text("Destination Hash (Hex)", style = MaterialTheme.typography.labelLarge, color = Gray500)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = "",
-                        onValueChange = {},
+                        value = destinationHash,
+                        onValueChange = { destinationHash = it },
                         placeholder = { Text("e.g. 8b4f2c...", style = MaterialTheme.typography.labelLarge, color = Gray300) },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -415,17 +416,19 @@ fun RNSScreen(
                     }
                     Button(
                         onClick = { 
-                            isSyncing = true
-                            rnsService.sendText("8b4f2c...", "SYNC_RECORDS_MOCK")
+                            if (destinationHash.isNotBlank()) {
+                                isSyncing = true
+                                rnsService.sendText(destinationHash, "SYNC_RECORDS_MOCK")
+                            }
                         },
                         modifier = Modifier.weight(2f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        enabled = rnsStatus.isRnsRunning && !isSyncing,
+                        enabled = rnsStatus.isRnsRunning && !isSyncing && destinationHash.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = Primary600)
                     ) {
                         Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sync 12 Records", style = MaterialTheme.typography.labelLarge)
+                        Text("Sync Records", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }

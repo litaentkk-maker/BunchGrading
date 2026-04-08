@@ -24,6 +24,14 @@ import androidx.compose.ui.unit.sp
 import com.palmharvest.pro.ui.theme.*
 import java.util.UUID
 import java.util.Calendar
+import android.location.Location
+import android.location.LocationManager
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +42,9 @@ fun MainScreen(
     var currentScreen by remember { mutableStateOf("capture") }
     var capturedBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var editingRecord by remember { mutableStateOf<HarvestRecord?>(null) }
+    var currentLat by remember { mutableStateOf<Double?>(null) }
+    var currentLng by remember { mutableStateOf<Double?>(null) }
+    
     val context = androidx.compose.ui.platform.LocalContext.current
     val rnsService = remember { RNSService(context) }
     val storageManager = remember { StorageManager(context) }
@@ -42,6 +53,30 @@ fun MainScreen(
 
     LaunchedEffect(user) {
         rnsService.startRNS(user)
+    }
+
+    fun getLocation() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) 
+                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            currentLat = location?.latitude
+            currentLng = location?.longitude
+        }
+    }
+
+    fun saveBitmapAsWebP(bitmap: Bitmap): String {
+        val filename = "harvest_${System.currentTimeMillis()}.webp"
+        val file = File(context.filesDir, filename)
+        FileOutputStream(file).use { out ->
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)
+            } else {
+                @Suppress("DEPRECATION")
+                bitmap.compress(Bitmap.CompressFormat.WEBP, 50, out)
+            }
+        }
+        return file.absolutePath
     }
 
     Scaffold(
@@ -73,6 +108,7 @@ fun MainScreen(
                     onCapture = { 
                         capturedBitmap = it
                         editingRecord = null
+                        getLocation()
                         currentScreen = "entry" 
                     },
                     onOpenRNS = { currentScreen = "rns" },
@@ -103,9 +139,15 @@ fun MainScreen(
                 "entry" -> EntryScreen(
                     photo = capturedBitmap,
                     initialBunchCount = editingRecord?.bunchCount ?: 1,
-                    onSave = { bunchCount -> 
+                    initialBlockId = editingRecord?.blockId ?: storageManager.getLastBlockId(),
+                    latitude = editingRecord?.latitude ?: currentLat,
+                    longitude = editingRecord?.longitude ?: currentLng,
+                    onSave = { bunchCount, blockId -> 
                         if (editingRecord != null) {
-                            val updatedRecord = editingRecord!!.copy(bunchCount = bunchCount)
+                            val updatedRecord = editingRecord!!.copy(
+                                bunchCount = bunchCount,
+                                blockId = blockId
+                            )
                             storageManager.saveRecord(updatedRecord)
                         } else {
                             val todayStart = Calendar.getInstance().apply {
@@ -126,16 +168,22 @@ fun MainScreen(
                             val name = user.split("@").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: "User"
                             val collectionPoint = String.format("%s-%02d", name, nextSeq)
 
+                            val photoPath = capturedBitmap?.let { saveBitmapAsWebP(it) } ?: ""
+
                             val newRecord = HarvestRecord(
                                 id = UUID.randomUUID().toString(),
                                 harvesterUid = user,
                                 harvesterName = name,
+                                blockId = blockId,
                                 collectionPoint = collectionPoint,
                                 bunchCount = bunchCount,
-                                photoUrl = "", // In a real app, save bitmap to file and store path
-                                timestamp = System.currentTimeMillis()
+                                photoUrl = photoPath,
+                                timestamp = System.currentTimeMillis(),
+                                latitude = currentLat,
+                                longitude = currentLng
                             )
                             storageManager.saveRecord(newRecord)
+                            storageManager.setLastBlockId(blockId)
                         }
                         records = storageManager.getRecords()
                         editingRecord = null
