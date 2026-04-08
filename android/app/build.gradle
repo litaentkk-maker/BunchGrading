@@ -48,10 +48,6 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
-
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
