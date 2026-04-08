@@ -133,7 +133,7 @@ export default function SettingsPage({ user, onBack, onExportCSV, onExportSheets
       </Card>
 
       <div className="text-center pt-4">
-        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">PalmHarvest Pro v1.0.2</p>
+        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">PalmHarvest Pro v1.0.3</p>
       </div>
     </div>
   );
