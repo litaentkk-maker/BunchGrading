@@ -29,7 +29,8 @@ import java.util.Locale
 fun CalendarScreen(
     records: List<HarvestRecord> = emptyList(),
     onExportCSV: () -> Unit = {},
-    onExportSheets: () -> Unit = {}
+    onExportSheets: () -> Unit = {},
+    onEditRecord: (HarvestRecord) -> Unit = {}
 ) {
     val todayCal = Calendar.getInstance()
     val todayYear = todayCal.get(Calendar.YEAR)
@@ -245,7 +246,8 @@ fun CalendarScreen(
                         HarvestItem(
                             point = record.collectionPoint,
                             bunches = record.bunchCount,
-                            time = timeFormat.format(Date(record.timestamp))
+                            time = timeFormat.format(Date(record.timestamp)),
+                            onLongClick = { onEditRecord(record) }
                         )
                         if (index < dailyRecords.size - 1) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)

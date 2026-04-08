@@ -25,10 +25,11 @@ import com.palmharvest.pro.ui.theme.*
 @Composable
 fun EntryScreen(
     photo: android.graphics.Bitmap? = null,
+    initialBunchCount: Int = 1,
     onSave: (Int) -> Unit = {},
     onCancel: () -> Unit = {}
 ) {
-    var bunchCount by remember { mutableStateOf(1) }
+    var bunchCount by remember(initialBunchCount) { mutableStateOf(initialBunchCount) }
     var isSaving by remember { mutableStateOf(false) }
 
     Column(

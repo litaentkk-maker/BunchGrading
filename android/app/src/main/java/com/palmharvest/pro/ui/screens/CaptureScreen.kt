@@ -30,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.palmharvest.pro.ui.theme.*
 import com.palmharvest.pro.HarvestRecord
 import java.text.SimpleDateFormat
@@ -40,7 +42,8 @@ import java.util.Locale
 fun CaptureScreen(
     recentRecords: List<HarvestRecord> = emptyList(),
     onCapture: (Bitmap) -> Unit = {},
-    onOpenRNS: () -> Unit = {}
+    onOpenRNS: () -> Unit = {},
+    onEditRecord: (HarvestRecord) -> Unit = {}
 ) {
     val context = LocalContext.current
     var capturedImage by remember { mutableStateOf<Bitmap?>(null) }
@@ -223,7 +226,8 @@ fun CaptureScreen(
                         HarvestItem(
                             point = record.collectionPoint,
                             bunches = record.bunchCount,
-                            time = timeFormat.format(Date(record.timestamp))
+                            time = timeFormat.format(Date(record.timestamp)),
+                            onLongClick = { onEditRecord(record) }
                         )
                         if (index < recentRecords.size - 1) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)
@@ -236,9 +240,15 @@ fun CaptureScreen(
 }
 
 @Composable
-fun HarvestItem(point: String, bunches: Int, time: String) {
+fun HarvestItem(point: String, bunches: Int, time: String, onLongClick: () -> Unit = {}) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { onLongClick() }
+                )
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {

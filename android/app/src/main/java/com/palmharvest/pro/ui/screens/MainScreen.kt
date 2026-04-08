@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.palmharvest.pro.ui.theme.*
 import java.util.UUID
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +33,7 @@ fun MainScreen(
 ) {
     var currentScreen by remember { mutableStateOf("capture") }
     var capturedBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var editingRecord by remember { mutableStateOf<HarvestRecord?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val rnsService = remember { RNSService(context) }
     val storageManager = remember { StorageManager(context) }
@@ -70,12 +72,21 @@ fun MainScreen(
                     recentRecords = records.take(5),
                     onCapture = { 
                         capturedBitmap = it
+                        editingRecord = null
                         currentScreen = "entry" 
                     },
-                    onOpenRNS = { currentScreen = "rns" }
+                    onOpenRNS = { currentScreen = "rns" },
+                    onEditRecord = { record ->
+                        editingRecord = record
+                        currentScreen = "entry"
+                    }
                 )
                 "calendar" -> CalendarScreen(
-                    records = records
+                    records = records,
+                    onEditRecord = { record ->
+                        editingRecord = record
+                        currentScreen = "entry"
+                    }
                 )
                 "settings" -> SettingsScreen(
                     onBack = { currentScreen = "capture" },
@@ -91,21 +102,49 @@ fun MainScreen(
                 )
                 "entry" -> EntryScreen(
                     photo = capturedBitmap,
+                    initialBunchCount = editingRecord?.bunchCount ?: 1,
                     onSave = { bunchCount -> 
-                        val newRecord = HarvestRecord(
-                            id = UUID.randomUUID().toString(),
-                            harvesterUid = user,
-                            harvesterName = user.split("@").firstOrNull() ?: "User",
-                            collectionPoint = "Main Station",
-                            bunchCount = bunchCount,
-                            photoUrl = "", // In a real app, save bitmap to file and store path
-                            timestamp = System.currentTimeMillis()
-                        )
-                        storageManager.saveRecord(newRecord)
+                        if (editingRecord != null) {
+                            val updatedRecord = editingRecord!!.copy(bunchCount = bunchCount)
+                            storageManager.saveRecord(updatedRecord)
+                        } else {
+                            val todayStart = Calendar.getInstance().apply {
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }.timeInMillis
+                            
+                            val todaysRecords = records.filter { 
+                                it.harvesterUid == user && it.timestamp >= todayStart 
+                            }
+                            val maxSeq = todaysRecords.mapNotNull { 
+                                it.collectionPoint.substringAfterLast("-").toIntOrNull() 
+                            }.maxOrNull() ?: 0
+                            val nextSeq = maxSeq + 1
+                            
+                            val name = user.split("@").firstOrNull()?.replaceFirstChar { it.uppercase() } ?: "User"
+                            val collectionPoint = String.format("%s-%02d", name, nextSeq)
+
+                            val newRecord = HarvestRecord(
+                                id = UUID.randomUUID().toString(),
+                                harvesterUid = user,
+                                harvesterName = name,
+                                collectionPoint = collectionPoint,
+                                bunchCount = bunchCount,
+                                photoUrl = "", // In a real app, save bitmap to file and store path
+                                timestamp = System.currentTimeMillis()
+                            )
+                            storageManager.saveRecord(newRecord)
+                        }
                         records = storageManager.getRecords()
+                        editingRecord = null
                         currentScreen = "capture" 
                     },
-                    onCancel = { currentScreen = "capture" }
+                    onCancel = { 
+                        editingRecord = null
+                        currentScreen = "capture" 
+                    }
                 )
             }
         }
