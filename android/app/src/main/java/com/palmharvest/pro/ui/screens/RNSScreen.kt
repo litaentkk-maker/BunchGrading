@@ -48,6 +48,7 @@ fun RNSScreen(
     var spreadingFactor by remember { mutableStateOf("8") }
     var codingRate by remember { mutableStateOf("6") }
     var destinationHash by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = Modifier
@@ -418,7 +419,19 @@ fun RNSScreen(
                         onClick = { 
                             if (destinationHash.isNotBlank()) {
                                 isSyncing = true
-                                rnsService.sendText(destinationHash, "SYNC_RECORDS_MOCK")
+                                val records = com.palmharvest.pro.StorageManager(context).getRecords()
+                                val csv = buildString {
+                                    append("id,harvester_id,block_id,collection_point,bunch_count,latitude,longitude,timestamp\n")
+                                    records.forEach { r ->
+                                        append("${r.id},${r.harvesterUid},${r.blockId},${r.collectionPoint},${r.bunchCount},${r.latitude ?: ""},${r.longitude ?: ""},${r.timestamp}\n")
+                                    }
+                                }
+                                rnsService.sendText(destinationHash, csv)
+                                
+                                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                    kotlinx.coroutines.delay(2000)
+                                    isSyncing = false
+                                }
                             }
                         },
                         modifier = Modifier.weight(2f).height(48.dp),

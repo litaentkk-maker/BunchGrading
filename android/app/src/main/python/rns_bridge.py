@@ -233,16 +233,18 @@ def inject_rnode(freq, bw, tx, sf, cr):
 
                 # --- SERIAL MONKEYPATCH ---
                 import serial
-                _orig_serial = serial.Serial
-                def _patched_serial(*args, **kwargs):
-                    port = kwargs.get('port') or (args[0] if args else None)
-                    if port and str(port).startswith("socket://"):
-                        if 'port' in kwargs:
-                            del kwargs['port']
-                        new_args = args[1:] if args else ()
-                        return serial.serial_for_url(port, *new_args, **kwargs)
-                    return _orig_serial(*args, **kwargs)
-                serial.Serial = _patched_serial
+                if not hasattr(serial, "_rns_patched"):
+                    _orig_serial = serial.Serial
+                    def _patched_serial(*args, **kwargs):
+                        port = kwargs.get('port') or (args[0] if args else None)
+                        if port and str(port).startswith("socket://"):
+                            if 'port' in kwargs:
+                                del kwargs['port']
+                            new_args = args[1:] if args else ()
+                            return serial.serial_for_url(port, *new_args, **kwargs)
+                        return _orig_serial(*args, **kwargs)
+                    serial.Serial = _patched_serial
+                    serial._rns_patched = True
 
                 try:
                     active_ifac = RNodeInterface(RNS.Transport, ictx)
@@ -254,7 +256,6 @@ def inject_rnode(freq, bw, tx, sf, cr):
                     if active_ifac not in RNS.Transport.interfaces:
                         RNS.Transport.interfaces.append(active_ifac)
                 finally:
-                    serial.Serial = _orig_serial
                     if _has_android_arg:
                         os.environ["ANDROID_ARGUMENT"] = _old_android_arg
                     if _has_android_root:
