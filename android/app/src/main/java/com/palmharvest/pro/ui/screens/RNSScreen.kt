@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.palmharvest.pro.ui.theme.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +51,7 @@ fun RNSScreen(
     var codingRate by remember { mutableStateOf("6") }
     var destinationHash by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -428,8 +431,8 @@ fun RNSScreen(
                                 }
                                 rnsService.sendText(destinationHash, csv)
                                 
-                                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                                    kotlinx.coroutines.delay(2000)
+                                coroutineScope.launch {
+                                    delay(2000)
                                     isSyncing = false
                                 }
                             }
