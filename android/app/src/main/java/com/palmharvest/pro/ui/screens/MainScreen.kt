@@ -2,6 +2,8 @@ package com.palmharvest.pro.ui.screens
 
 import android.content.Context
 import com.palmharvest.pro.RNSService
+import com.palmharvest.pro.StorageManager
+import com.palmharvest.pro.HarvestRecord
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -20,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.palmharvest.pro.ui.theme.*
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +34,9 @@ fun MainScreen(
     var capturedBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val rnsService = remember { RNSService(context) }
+    val storageManager = remember { StorageManager(context) }
+    
+    var records by remember { mutableStateOf(storageManager.getRecords()) }
 
     LaunchedEffect(user) {
         rnsService.startRNS(user)
@@ -61,16 +67,23 @@ fun MainScreen(
         Box(modifier = Modifier.padding(paddingValues)) {
             when (currentScreen) {
                 "capture" -> CaptureScreen(
+                    recentRecords = records.take(5),
                     onCapture = { 
                         capturedBitmap = it
                         currentScreen = "entry" 
                     },
                     onOpenRNS = { currentScreen = "rns" }
                 )
-                "calendar" -> CalendarScreen()
+                "calendar" -> CalendarScreen(
+                    records = records
+                )
                 "settings" -> SettingsScreen(
                     onBack = { currentScreen = "capture" },
-                    onOpenRNS = { currentScreen = "rns" }
+                    onOpenRNS = { currentScreen = "rns" },
+                    onClearData = {
+                        storageManager.clearAll()
+                        records = emptyList()
+                    }
                 )
                 "rns" -> RNSScreen(
                     rnsService = rnsService,
@@ -78,7 +91,20 @@ fun MainScreen(
                 )
                 "entry" -> EntryScreen(
                     photo = capturedBitmap,
-                    onSave = { currentScreen = "capture" },
+                    onSave = { bunchCount -> 
+                        val newRecord = HarvestRecord(
+                            id = UUID.randomUUID().toString(),
+                            harvesterUid = user,
+                            harvesterName = user.split("@").firstOrNull() ?: "User",
+                            collectionPoint = "Main Station",
+                            bunchCount = bunchCount,
+                            photoUrl = "", // In a real app, save bitmap to file and store path
+                            timestamp = System.currentTimeMillis()
+                        )
+                        storageManager.saveRecord(newRecord)
+                        records = storageManager.getRecords()
+                        currentScreen = "capture" 
+                    },
                     onCancel = { currentScreen = "capture" }
                 )
             }

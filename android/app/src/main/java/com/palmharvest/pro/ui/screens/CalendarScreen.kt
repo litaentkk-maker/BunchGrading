@@ -21,12 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.palmharvest.pro.ui.theme.*
+import com.palmharvest.pro.HarvestRecord
 
 @Composable
 fun CalendarScreen(
+    records: List<HarvestRecord> = emptyList(),
     onExportCSV: () -> Unit = {},
     onExportSheets: () -> Unit = {}
 ) {
+    val totalBunches = records.sumOf { it.bunchCount }
+    val uniquePoints = records.map { it.collectionPoint }.distinct().size
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -173,11 +178,11 @@ fun CalendarScreen(
                 ) {
                     Column {
                         Text("Total Bunches", style = MaterialTheme.typography.labelMedium, color = Gray400)
-                        Text("142", style = MaterialTheme.typography.displaySmall, color = Primary700)
+                        Text("$totalBunches", style = MaterialTheme.typography.displaySmall, color = Primary700)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Collection Points", style = MaterialTheme.typography.labelMedium, color = Gray400)
-                        Text("12", style = MaterialTheme.typography.displaySmall, color = Gray900)
+                        Text("$uniquePoints", style = MaterialTheme.typography.displaySmall, color = Gray900)
                     }
                 }
             }

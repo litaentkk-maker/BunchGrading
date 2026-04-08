@@ -26,7 +26,8 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     onOpenRNS: () -> Unit = {},
     onExportCSV: () -> Unit = {},
-    onExportSheets: () -> Unit = {}
+    onExportSheets: () -> Unit = {},
+    onClearData: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -173,7 +174,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 TextButton(
-                    onClick = { /* Clear cache */ },
+                    onClick = onClearData,
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(0.dp)
                 ) {

@@ -31,9 +31,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.palmharvest.pro.ui.theme.*
+import com.palmharvest.pro.HarvestRecord
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun CaptureScreen(
+    recentRecords: List<HarvestRecord> = emptyList(),
     onCapture: (Bitmap) -> Unit = {},
     onOpenRNS: () -> Unit = {}
 ) {
@@ -205,13 +210,25 @@ fun CaptureScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Mock List
-                repeat(3) {
-                    HarvestItem(
-                        point = "har0${it + 1}",
-                        bunches = (it + 1) * 12,
-                        time = "10:2${it} AM"
+                if (recentRecords.isEmpty()) {
+                    Text(
+                        text = "No harvests today",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Gray500,
+                        modifier = Modifier.padding(vertical = 16.dp)
                     )
-                    if (it < 2) HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)
+                } else {
+                    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                    recentRecords.forEachIndexed { index, record ->
+                        HarvestItem(
+                            point = record.collectionPoint,
+                            bunches = record.bunchCount,
+                            time = timeFormat.format(Date(record.timestamp))
+                        )
+                        if (index < recentRecords.size - 1) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Gray100)
+                        }
+                    }
                 }
             }
         }
